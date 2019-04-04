@@ -12,9 +12,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "XtensaISelLowering.h"
 #include "XtensaCallingConv.h"
 #include "XtensaConstantPoolValue.h"
+#include "XtensaISelLowering.h"
 #include "XtensaMachineFunctionInfo.h"
 #include "XtensaSubtarget.h"
 #include "XtensaTargetMachine.h"
@@ -91,7 +91,6 @@ XtensaTargetLowering::XtensaTargetLowering(const TargetMachine &tm,
   else
     setOperationAction(ISD::BR_CC, MVT::f32, Expand);
 
-
   setOperationAction(ISD::SELECT, MVT::i32, Expand);
   setOperationAction(ISD::SELECT, MVT::i64, Expand);
   setOperationAction(ISD::SELECT, MVT::f32, Expand);
@@ -103,7 +102,6 @@ XtensaTargetLowering::XtensaTargetLowering(const TargetMachine &tm,
   else
     setOperationAction(ISD::SELECT_CC, MVT::f32, Expand);
 
-
   setOperationAction(ISD::SETCC, MVT::i32,
                      Custom /* Legal */); // folds into brcond
   setOperationAction(ISD::SETCC, MVT::i64, Expand);
@@ -111,7 +109,6 @@ XtensaTargetLowering::XtensaTargetLowering(const TargetMachine &tm,
     setOperationAction(ISD::SETCC, MVT::f32, Custom);
   else
     setOperationAction(ISD::SETCC, MVT::f32, Expand);
-
 
   setOperationAction(ISD::Constant, MVT::i32, Custom);
   setOperationAction(ISD::Constant, MVT::i64, Expand /*Custom */);
@@ -159,7 +156,7 @@ XtensaTargetLowering::XtensaTargetLowering(const TargetMachine &tm,
     setOperationAction(ISD::SDIV, MVT::i32, Expand);
     setOperationAction(ISD::UDIV, MVT::i32, Expand);
     setOperationAction(ISD::SREM, MVT::i32, Expand);
-    setOperationAction(ISD::UREM, MVT::i32, Expand);  
+    setOperationAction(ISD::UREM, MVT::i32, Expand);
   }
   setOperationAction(ISD::SDIV, MVT::i64, Expand);
   setOperationAction(ISD::UDIV, MVT::i64, Expand);
@@ -571,9 +568,9 @@ static unsigned addLiveIn(MachineFunction &MF, unsigned PReg,
   return VReg;
 }
 #endif
-//===----------------------------------------------------------------------===//
-// Calling conventions
-//===----------------------------------------------------------------------===//
+  //===----------------------------------------------------------------------===//
+  // Calling conventions
+  //===----------------------------------------------------------------------===//
 
 #include "XtensaGenCallingConv.inc"
 
@@ -841,7 +838,8 @@ SDValue XtensaTargetLowering::getTargetNode(SDValue Op, SelectionDAG &DAG,
   return SDValue();
 }
 
-SDValue XtensaTargetLowering::getAddrPIC(SDValue Op, SelectionDAG &DAG) const {
+SDValue XtensaTargetLowering::getAddrPCRel(SDValue Op,
+                                           SelectionDAG &DAG) const {
   SDLoc DL(Op);
   EVT Ty = Op.getValueType();
   return DAG.getNode(XtensaISD::PCREL_WRAPPER, DL, Ty, Op);
@@ -975,10 +973,9 @@ XtensaTargetLowering::LowerCall(CallLoweringInfo &CLI,
   // associated Target* opcodes.
   if (ExternalSymbolSDNode *E = dyn_cast<ExternalSymbolSDNode>(Callee)) {
     name = E->getSymbol();
-    if (DAG.getTarget().getRelocationModel() == Reloc::PIC_)
-      Callee =
-          getAddrPIC(DAG.getTargetExternalSymbol(E->getSymbol(), PtrVT), DAG);
-    else
+    if (isPositionIndependent()) {
+      report_fatal_error("PIC relocations is not supported");
+    } else
       Callee = DAG.getTargetExternalSymbol(E->getSymbol(), PtrVT);
   } else if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee)) {
     // TODO replace GlobalAddress to some special operand instead of
@@ -998,7 +995,7 @@ XtensaTargetLowering::LowerCall(CallLoweringInfo &CLI,
 
     // Get the address of the callee into a register
     SDValue CPAddr = DAG.getTargetConstantPool(CPV, PtrVT, 4);
-    SDValue CPWrap = getAddrPIC(CPAddr, DAG);
+    SDValue CPWrap = getAddrPCRel(CPAddr, DAG);
     Callee = CPWrap;
   }
 
@@ -1366,7 +1363,7 @@ SDValue XtensaTargetLowering::lowerGlobalAddress(SDValue Op,
 
     // Get the address of the callee into a register
     SDValue CPAddr = DAG.getTargetConstantPool(CPV, PtrVt, 4);
-    SDValue CPWrap = getAddrPIC(CPAddr, DAG);
+    SDValue CPWrap = getAddrPCRel(CPAddr, DAG);
 
     return CPWrap;
   }
@@ -1393,7 +1390,7 @@ SDValue XtensaTargetLowering::lowerGlobalTLSAddress(GlobalAddressSDNode *GA,
 
     // Get the address of the callee into a register
     SDValue CPAddr = DAG.getTargetConstantPool(CPV, PtrVt, 4);
-    SDValue CPWrap = getAddrPIC(CPAddr, DAG);
+    SDValue CPWrap = getAddrPCRel(CPAddr, DAG);
 
     SDValue ThreadPointer = DAG.getNode(XtensaISD::RUR, DL, PtrVT);
     return DAG.getNode(ISD::ADD, DL, PtrVT, ThreadPointer, CPWrap);
@@ -1409,7 +1406,7 @@ SDValue XtensaTargetLowering::lowerGlobalTLSAddress(GlobalAddressSDNode *GA,
 
     // Get the address of the callee into a register
     SDValue CPAddr = DAG.getTargetConstantPool(CPV, PtrVt, 4);
-    SDValue CPWrap = getAddrPIC(CPAddr, DAG);
+    SDValue CPWrap = getAddrPCRel(CPAddr, DAG);
 
     SDValue ThreadPointer = DAG.getNode(XtensaISD::RUR, DL, PtrVT);
     return DAG.getNode(ISD::ADD, DL, PtrVT, ThreadPointer, CPWrap);
@@ -1428,7 +1425,7 @@ SDValue XtensaTargetLowering::lowerBlockAddress(BlockAddressSDNode *Node,
       XtensaConstantPoolConstant::Create(BA, 0, XtensaCP::CPBlockAddress, 0);
   SDValue CPAddr = DAG.getTargetConstantPool(CPV, PtrVT, 4);
 
-  SDValue CPWrap = getAddrPIC(CPAddr, DAG);
+  SDValue CPWrap = getAddrPCRel(CPAddr, DAG);
   return CPWrap;
 }
 
@@ -1472,7 +1469,7 @@ SDValue XtensaTargetLowering::lowerJumpTable(JumpTableSDNode *JT,
 
   // Get the address of the callee into a register
   SDValue CPAddr = DAG.getTargetConstantPool(CPV, PtrVt, 4);
-  SDValue CPWrap = getAddrPIC(CPAddr, DAG);
+  SDValue CPWrap = getAddrPCRel(CPAddr, DAG);
 
   return CPWrap;
 }
@@ -1489,7 +1486,7 @@ SDValue XtensaTargetLowering::lowerConstantPool(ConstantPoolSDNode *CP,
     Result = DAG.getTargetConstantPool(CP->getConstVal(), PtrVT,
                                        CP->getAlignment(), CP->getOffset());
 
-  return getAddrPIC(Result, DAG);
+  return getAddrPCRel(Result, DAG);
 }
 
 SDValue XtensaTargetLowering::lowerVASTART(SDValue Op,
@@ -2621,13 +2618,11 @@ MachineBasicBlock *XtensaTargetLowering::EmitInstrWithCustomInserter(
     }
 
     BuildMI(*MBB, MI, DL, TII.get(Xtensa::L8UI), r_new).add(Op1).add(Op2);
-    if (Subtarget.hasSEXT())
-    {
-       BuildMI(*MBB, MI, DL, TII.get(Xtensa::SEXT), R.getReg())
-        .addReg(r_new)
-        .addImm(7);
-    } else
-    {
+    if (Subtarget.hasSEXT()) {
+      BuildMI(*MBB, MI, DL, TII.get(Xtensa::SEXT), R.getReg())
+          .addReg(r_new)
+          .addImm(7);
+    } else {
       unsigned r_new1 = MRI.createVirtualRegister(RC);
       BuildMI(*MBB, MI, DL, TII.get(Xtensa::SLLI), r_new1)
           .addReg(r_new)

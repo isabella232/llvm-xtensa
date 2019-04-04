@@ -220,7 +220,7 @@ private:
   SDValue lowerShiftRightParts(SDValue Op, SelectionDAG &DAG, bool IsSRA) const;
 
   SDValue getTargetNode(SDValue Op, SelectionDAG &DAG, unsigned Flag) const;
-  SDValue getAddrPIC(SDValue Op, SelectionDAG &DAG) const;
+  SDValue getAddrPCRel(SDValue Op, SelectionDAG &DAG) const;
 
   // Implement EmitInstrWithCustomInserter for individual operation types.
   MachineBasicBlock *emitCALL(MachineInstr *MI, MachineBasicBlock *BB) const;
