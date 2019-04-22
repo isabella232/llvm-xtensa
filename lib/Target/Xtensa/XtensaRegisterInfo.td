@@ -26,7 +26,8 @@ class XtensaRegWithSubRegs<string n, list<Register> subregs>
 
 // Xtensa general purpose regs
 class ARReg<bits<4> num, string n> : XtensaReg<n> {
-  field bits<4> number = num;
+  //field bits<4> number = num;
+    let HWEncoding{3-0} = num;
 }
 
 // Return Address

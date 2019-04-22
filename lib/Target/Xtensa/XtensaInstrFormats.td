@@ -36,7 +36,7 @@ class XtensaInst24<dag outs, dag ins, string asmstr, list<dag> pattern,
 // Base class for Xtensa 16 bit Format
 class XtensaInst16<dag outs, dag ins, string asmstr, list<dag> pattern,
                       InstrItinClass itin = NoItinerary>: 
-                XtensaInst<3, outs, ins, asmstr, pattern, itin>  
+                XtensaInst<2, outs, ins, asmstr, pattern, itin>  
 {
   field bits<16> Inst;
   let Predicates = [HasDensity];
@@ -196,11 +196,10 @@ class RRRN_Inst<bits<4> op0, dag outs, dag ins,
   let Inst{3-0} = op0;
 }
 
-class RI7_Inst<bits<4> op0, dag outs, dag ins, 
+class RI7_Inst<bits<4> op0, bits<1> i, dag outs, dag ins, 
                string asmstr, list<dag> pattern, InstrItinClass itin = NoItinerary>: 
                  XtensaInst16<outs, ins, asmstr, pattern, itin>
 {
-  bits<1> i;
   bits<7> imm7;
   bits<4> s;
 
@@ -211,12 +210,10 @@ class RI7_Inst<bits<4> op0, dag outs, dag ins,
   let Inst{3-0} = op0;
 }
 
-class RI6_Inst<bits<4> op0, dag outs, dag ins, 
+class RI6_Inst<bits<4> op0, bits<1> i,  bits<1> z, dag outs, dag ins, 
                string asmstr, list<dag> pattern, InstrItinClass itin = NoItinerary>: 
                  XtensaInst16<outs, ins, asmstr, pattern, itin>
 {
-  bits<1> i;
-  bits<1> z;
   bits<6> imm6;
   bits<4> s;
 

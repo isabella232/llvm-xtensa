@@ -25,7 +25,7 @@ class ArithLogic_RRRN<bits<4> oper0, string instrAsm, SDPatternOperator opNode,
   let isReMaterializable = 0;
 }
 
-def ADD_N: ArithLogic_RRRN<0x08, "add.n", add, 1>;
+def ADD_N: ArithLogic_RRRN<0x0a, "add.n", add, 1>;
 
 class ArithLogic_RRR<bits<4> oper2, bits<4> oper1, string instrAsm, 
     SDPatternOperator opNode, bit isComm = 0>:
@@ -93,11 +93,17 @@ let Uses = [sar] in
 {
   def SLL: RRR_Inst<0x00, 0x01, 0x0A, (outs AR:$r), (ins AR:$s),
        "sll\t$r, $s",
-       [(set AR:$r, (Xtensa_shl AR:$s))]>;
+       [(set AR:$r, (Xtensa_shl AR:$s))]>
+  {
+    let t = 0x00;
+  }
 
   def SRA: RRR_Inst<0x00, 0x01, 0x0B, (outs AR:$r), (ins AR:$t),
        "sra\t$r, $t",
-       [(set AR:$r, (Xtensa_sra AR:$t))]>;
+       [(set AR:$r, (Xtensa_sra AR:$t))]>
+  {
+    let s = 0x00;
+  }
 
   def SRC: RRR_Inst<0x00, 0x01, 0x08, (outs AR:$r), (ins AR:$s, AR:$t),
        "src\t$r, $s, $t",
@@ -105,7 +111,10 @@ let Uses = [sar] in
 
   def SRL: RRR_Inst<0x00, 0x01, 0x09, (outs AR:$r), (ins AR:$t),
        "srl\t$r, $t",
-       [(set AR:$r, (Xtensa_srl AR:$t))]>;
+       [(set AR:$r, (Xtensa_srl AR:$t))]>
+  {
+    let s = 0x00;
+  }
 }
 let Defs = [sar] in
 {
@@ -207,9 +216,16 @@ def MOVSP: RRR_Inst<0x00, 0x00, 0x00, (outs AR:$t), (ins AR:$s),
   let r = 0x01;
 }
 
-def MOVI_N: RI7_Inst<0x02, (outs AR:$s), (ins imm7n:$imm7),
+def MOVI_N: RI7_Inst<0xc, 0x0, (outs AR:$s), (ins imm7n:$imm7),
    "movi.n\t$s, $imm7",
    [(set AR:$s, imm7n:$imm7)]>;
+
+// A 9-bit signed immediate where the least significant bit is zero.
+def simm9_lsb0 : Operand<OtherVT> {
+ // let ParserMatchClass = SImmAsmOperand<9, "Lsb0">;
+ // let EncoderMethod = "getImmOpValueAsr1";
+ // let DecoderMethod = "decodeSImmOperandAndLsl1<9>";
+}
 
 def MOVI: RRI8_Inst<0x02, (outs AR:$t), (ins imm12:$imm),
    "movi\t$t, $imm",
@@ -217,8 +233,13 @@ def MOVI: RRI8_Inst<0x02, (outs AR:$t), (ins imm12:$imm),
 {
   bits<12> imm;
 
-  let imm8 = !and(imm, 0xFF);
-  let s = !srl(imm, 8);
+  let imm8{7-0} = imm{7-0}; 
+  let s{3-0} = imm{11-8}; 
+  let r = 0xa;
+  //let imm8 = !and(imm, 0xFF);
+  //let s = !srl(imm, 8);
+  //let Inst{23-16} = imm1{7-0};
+  //let s{3-0} = imm{11-8};
 }
 
 //TODO replace to L32R
@@ -236,8 +257,9 @@ def SSAI: RRR_Inst<0x00, 0x00, 0x04, (outs), (ins shimm5:$imm),
   bits<5> imm;
 
   let r = 0x04;
-  let s = !and(imm, 0xF);
-  let t = !srl(imm, 4);
+  let s = imm{3-0};
+  let t{3-1} = 0;
+  let t{0} = imm{4};
 }
 
 /*
@@ -260,16 +282,24 @@ let mayLoad = 1, usesCustomInserter = 1 in
 {
   def L32I_N: RRRN_Inst<0x8, (outs AR:$t), (ins mem32n:$addr), 
                 "l32i.n\t$t, $addr", 
-                [/*(set AR:$t, (load addrn:$addr))*/]>;
+                [/*(set AR:$t, (load addrn:$addr))*/]>
+ {
+   bits<8> addr;
+
+   let r{3-0} = addr{7-4};
+   let s{3-0} = addr{3-0};
+ }
 
   class Load_RRI8<bits<4> oper, string instrAsm, SDPatternOperator opNode, 
       ComplexPattern addrOp, Operand memOp>: RRI8_Inst<0x02, (outs AR:$t), (ins memOp:$addr), 
                 instrAsm#"\t$t, $addr", 
                 [(set AR:$t, (opNode addrOp:$addr))]>
   {
-    let r = oper;
-  }
+   bits<12> addr;
 
+   let imm8{7-0} = addr{11-4};
+   let s{3-0} = addr{3-0};
+  }
 }
 
 // Xtensa missed L8I load operation, use pseudo operation
@@ -300,18 +330,26 @@ def : Pat<(i32 (extloadi16 addr_ish2:$addr)), (L16UI addr_ish2:$addr)>;
 // Store instructions
 let mayStore = 1, usesCustomInserter = 1 in
 {
-  def S32I_N: RRRN_Inst<0x8, (outs), (ins AR:$t, mem32n:$addr),
+  def S32I_N: RRRN_Inst<0x9, (outs), (ins  AR:$t, mem32n:$addr),
               "s32i.n\t$t, $addr", 
-              [/*(store AR:$t, addrn:$addr)*/]>;
+              [/*(store AR:$t, addrn:$addr)*/]>
+ {
+   bits<8> addr;
+
+   let r{3-0} = addr{7-4};
+   let s{3-0} = addr{3-0};
+ }
 
   class Store_II8<bits<4> oper, string instrAsm, SDPatternOperator opNode, 
       ComplexPattern addrOp, Operand memOp>: RRI8_Inst<0x02, (outs), (ins AR:$t, memOp:$addr),
               instrAsm#"\t$t, $addr", 
               [(opNode AR:$t, addrOp:$addr)]>
   {
-    let r = oper;
-  }
+   bits<12> addr;
 
+   let imm8{7-0} = addr{11-4};
+   let s{3-0} = addr{3-0};
+  }
 }
 
 def S8I: Store_II8<0x04, "s8i", truncstorei8, addr_ish1, mem8>;
@@ -319,7 +357,11 @@ def S16I: Store_II8<0x05, "s16i", truncstorei16, addr_ish2, mem16>;
 def S32I: Store_II8<0x06, "s32i", store, addr_ish4, mem32>;
  
 def L32R: RI16_Inst<0x01, (outs AR:$t), (ins imm32:$label), "l32r\t$t, $label", 
-    []>;
+    []>
+{
+  bits<16> label;	
+  let imm16 = label;
+}
 
 // Conditional move instructions
 def MOVEQZ : RRR_Inst<0x00, 0x03, 0x08, (outs AR:$r), (ins AR:$s, AR:$t),
@@ -380,7 +422,10 @@ let isBranch = 1, isTerminator = 1, isBarrier = 1 in
               instrAsm#"\t$s, $t, $target", 
               [(brcc CC, AR:$s, AR:$t,  bb:$target)]>
   {
+    bits<8> target;
+
     let r = oper;
+	let imm8 = target;
   }
 
   class Branch_RR_rev<bits<4> oper, string instrAsm, CondCode CC>:  
@@ -389,7 +434,10 @@ let isBranch = 1, isTerminator = 1, isBarrier = 1 in
               instrAsm#"\t$t, $s, $target", 
               [(brcc CC, AR:$s, AR:$t,  bb:$target)]>
   {
+    bits<8> target;
+
     let r = oper;
+	let imm8 = target;
   }
 
   class Branch_RI<bits<4> oper, string instrAsm, CondCode CC>: 
@@ -398,7 +446,12 @@ let isBranch = 1, isTerminator = 1, isBarrier = 1 in
               instrAsm#"\t$s, $imm, $target", 
               [(brcc CC, AR:$s, b4const:$imm,  bb:$target)]>
   {
+    bits<4> imm;
+    bits<8> target;
+
     let t = oper;
+	let r = imm;
+	let imm8 = target;
   }
 
   class Branch_RIU<bits<4> oper, string instrAsm, CondCode CC>: 
@@ -407,16 +460,23 @@ let isBranch = 1, isTerminator = 1, isBarrier = 1 in
               instrAsm#"\t$s, $imm, $target", 
               [(brcc CC, AR:$s, b4constu:$imm,  bb:$target)]>
   {
+    bits<4> imm;
+	bits<8> target;
+
     let t = oper;
+	let r = imm;
+	let imm8 = target;
   }
 
-  class Branch_RZ<bits<4> oper, string instrAsm, CondCode CC>: 
-        RRI8_Inst<0x06, (outs), 
+  class Branch_RZ<bits<2> n, bits<2> m, string instrAsm, CondCode CC>: 
+        BRI12_Inst<0x06, (outs), 
               (ins AR:$s, brtarget:$target), 
               instrAsm#"\t$s, $target", 
               [(brcc CC, AR:$s, (i32 0),  bb:$target)]>
   {
-    let r = oper;
+    bits<12> target;
+
+	let imm12 = target;
   }
 }
 
@@ -440,10 +500,10 @@ def BLTI: Branch_RI<0x0A, "blti", SETLT>;
 def BGEUI: Branch_RIU<0x0F, "bgeui", SETUGE>;
 def BLTUI: Branch_RIU<0x0B, "bltui", SETULT>;
 
-def BEQZ: Branch_RZ<0x01, "beqz", SETEQ>;
-def BNEZ: Branch_RZ<0x05, "bnez", SETNE>;
-def BGEZ: Branch_RZ<0x0D, "bgez", SETGE>;
-def BLTZ: Branch_RZ<0x09, "bltz", SETLT>;
+def BEQZ: Branch_RZ<0x01, 0x00, "beqz", SETEQ>;
+def BNEZ: Branch_RZ<0x01, 0x01, "bnez", SETNE>;
+def BGEZ: Branch_RZ<0x01, 0x03, "bgez", SETGE>;
+def BLTZ: Branch_RZ<0x01, 0x02, "bltz", SETLT>;
 
 
 def : Pat<(brcond (i32 (seteq AR:$s, AR:$t)), bb:$target),
@@ -535,6 +595,7 @@ let isCall = 1,
     {
       let m = 0x3;
       let n = 0x0;
+	  let r = 0;
     }
 	
     def CALLX4: CALLX_Inst<0x00, 0x00, 0x00, (outs), (ins AR:$s), 
@@ -542,6 +603,7 @@ let isCall = 1,
     {
       let m = 0x3;
       let n = 0x1;
+	  let r = 0;
     }
 
     def CALLX8: CALLX_Inst<0x00, 0x00, 0x00, (outs), (ins AR:$s), 
@@ -549,6 +611,7 @@ let isCall = 1,
     {
       let m = 0x3;
       let n = 0x2;
+	  let r = 0;
     }
 
     def CALLX12: CALLX_Inst<0x00, 0x00, 0x00, (outs), (ins AR:$s), 
@@ -556,6 +619,7 @@ let isCall = 1,
     {
       let m = 0x3;
       let n = 0x3;
+	  let r = 0;
     }
   }
 }
@@ -584,11 +648,14 @@ let isReturn = 1, isTerminator = 1, isCodeGenOnly = 1,
 def : Pat<(Xtensa_retflag), (RET_N)>;
 def : Pat<(Xtensa_retWflag), (RETW_N)>;
 
-def ENTRY: BRI12_Inst<0x06, (outs), (ins AR:$s, entry_imm12:$imm12), 
-                "entry\t$s, $imm12", []>, Requires<[HasWindowed]>
+def ENTRY: BRI12_Inst<0x06, (outs), (ins AR:$s, entry_imm12:$imm), 
+                "entry\t$s, $imm", []>, Requires<[HasWindowed]>
 {
+  bits<15> imm;
+
   let m = 0x0;
-  let n = 0x2;
+  let n = 0x3;
+  let imm12{11-0} = imm{14-3};
   let Defs = [sp];
 }
 
