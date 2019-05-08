@@ -16,11 +16,14 @@
 #include "InstPrinter/XtensaInstPrinter.h"
 #include "XtensaConstantPoolValue.h"
 #include "XtensaMCInstLower.h"
+#include "llvm/BinaryFormat/ELF.h"
 #include "llvm/CodeGen/MachineModuleInfoImpls.h"
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include "llvm/MC/MCExpr.h"
+#include "llvm/MC/MCSectionELF.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSymbol.h"
+#include "llvm/MC/MCSymbolELF.h"
 #include "llvm/Support/TargetRegistry.h"
 
 using namespace llvm;
@@ -37,16 +40,23 @@ void XtensaAsmPrinter::EmitInstruction(const MachineInstr *MI) {
 /// used to print out constants which have been "spilled to memory" by
 /// the code generator.
 void XtensaAsmPrinter::EmitConstantPool() {
-  const Function &F = MF->getFunction();
   const MachineConstantPool *MCP = MF->getConstantPool();
   const std::vector<MachineConstantPoolEntry> &CP = MCP->getConstants();
   if (CP.empty())
     return;
 
-  OutStreamer->SwitchSection(getObjFileLowering().SectionForGlobal(&F, TM));
-  OutStreamer->EmitRawText("\t.literal_position");
   for (unsigned i = 0, e = CP.size(); i != e; ++i) {
     const MachineConstantPoolEntry &CPE = CP[i];
+    unsigned Align = CPE.getAlignment();
+    SectionKind Kind = CPE.getSectionKind(&getDataLayout());
+    const Constant *C = nullptr;
+
+    if (!CPE.isMachineConstantPoolEntry())
+      C = CPE.Val.ConstVal;
+
+    MCSection *S = getObjFileLowering().getSectionForConstant(getDataLayout(),
+                                                              Kind, C, Align);
+    OutStreamer->SwitchSection(S);
 
     if (CPE.isMachineConstantPoolEntry()) {
       XtensaConstantPoolValue *ACPV =
@@ -55,21 +65,26 @@ void XtensaAsmPrinter::EmitConstantPool() {
       EmitMachineConstantPoolValue(CPE.Val.MachineCPVal);
     } else {
       MCSymbol *LblSym = GetCPISymbol(i);
+      // TODO find a better way to check whether we emit data to .s file
+      if (OutStreamer->hasRawTextSupport()) {
+        std::string str("\t.literal ");
+        str += LblSym->getName();
+        str += ", ";
+        if (CPE.Val.ConstVal->getType()->getTypeID() == llvm::Type::FloatTyID) {
+          const ConstantFP *CFPVal =
+              static_cast<const ConstantFP *>(CPE.Val.ConstVal);
+          str += CFPVal->getValueAPF().bitcastToAPInt().toString(10, true);
+        } else {
+          const ConstantInt *CVal =
+              static_cast<const ConstantInt *>(CPE.Val.ConstVal);
+          str += CVal->getValue().toString(10, true);
+        }
 
-      std::string str("\t.literal ");
-      str += LblSym->getName();
-      str += ", ";
-      if (CPE.Val.ConstVal->getType()->getTypeID() == llvm::Type::FloatTyID) {
-        const ConstantFP *CFPVal =
-            static_cast<const ConstantFP *>(CPE.Val.ConstVal);
-        str += CFPVal->getValueAPF().bitcastToAPInt().toString(10, true);
+        OutStreamer->EmitRawText(str);
       } else {
-        const ConstantInt *CVal =
-            static_cast<const ConstantInt *>(CPE.Val.ConstVal);
-        str += CVal->getValue().toString(10, true);
+        OutStreamer->EmitLabel(LblSym);
+        EmitGlobalConstant(getDataLayout(), CPE.Val.ConstVal);
       }
-
-      OutStreamer->EmitRawText(str);
     }
   }
 }
@@ -87,7 +102,6 @@ void XtensaAsmPrinter::EmitMachineConstantPoolValue(
     MCSym = GetBlockAddressSymbol(BA);
   } else if (ACPV->isGlobalValue()) {
     const GlobalValue *GV = cast<XtensaConstantPoolConstant>(ACPV)->getGV();
-
     // TODO some modifiers
     MCSym = getSymbol(GV);
   } else if (ACPV->isMachineBasicBlock()) {
@@ -102,40 +116,40 @@ void XtensaAsmPrinter::EmitMachineConstantPoolValue(
     const char *Sym = XtensaSym->getSymbol();
     // TODO it's a trick to distinguish static references and generated rodata
     // references Some clear method required
-    // if (strchr(Sym, '.'))
     {
       std::string buf(Sym);
       if (XtensaSym->isPrivateLinkage())
         buf = ".L" + buf;
       MCSym = GetExternalSymbolSymbol(StringRef(buf));
     }
-    //    else
-    //      MCSym = GetExternalSymbolSymbol(Sym);
   }
 
   MCSymbol *LblSym = GetCPISymbol(ACPV->getLabelId());
+  // TODO find a better way to check whether we emit data to .s file
+  if (OutStreamer->hasRawTextSupport()) {
+    std::string str("\t.literal ");
+    str += LblSym->getName();
+    str += ", ";
+    str += MCSym->getName();
 
-  std::string str("\t.literal ");
-  str += LblSym->getName();
-  str += ", ";
-  str += MCSym->getName();
+    StringRef modifier = ACPV->getModifierText();
+    str += modifier;
 
-  StringRef modifier = ACPV->getModifierText();
-  str += modifier;
-
-  OutStreamer->EmitRawText(str);
+    OutStreamer->EmitRawText(str);
+  } else {
+    const MCExpr *Expr =
+        MCSymbolRefExpr::create(MCSym, MCSymbolRefExpr::VK_None, OutContext);
+    uint64_t Size = getDataLayout().getTypeAllocSize(ACPV->getType());
+    OutStreamer->EmitLabel(LblSym);
+    OutStreamer->EmitValue(Expr, Size);
+  }
 }
 
 void XtensaAsmPrinter::printOperand(const MachineInstr *MI, int OpNo,
                                     raw_ostream &O) {
   const MachineOperand &MO = MI->getOperand(OpNo);
-  // look at target flags to see if we should wrap this operand
-  /* TODO
-  switch (MO.getTargetFlags())
-  {
-  }
-  */
-
+  // TODO look at target flags MO.getTargetFlags() to see if we should wrap this
+  // operand
   switch (MO.getType()) {
   case MachineOperand::MO_Register:
   case MachineOperand::MO_Immediate: {

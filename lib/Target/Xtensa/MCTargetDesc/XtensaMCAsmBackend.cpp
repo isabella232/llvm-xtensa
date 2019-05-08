@@ -57,11 +57,18 @@ XtensaMCAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
       // name                    offset bits  flags
       {"fixup_xtensa_branch_6", 0, 6, MCFixupKindInfo::FKF_IsPCRel},
       {"fixup_xtensa_branch_8", 0, 8, MCFixupKindInfo::FKF_IsPCRel},
+      {"fixup_xtensa_branch_12", 0, 12, MCFixupKindInfo::FKF_IsPCRel},
       {"fixup_xtensa_jump_18", 0, 18, MCFixupKindInfo::FKF_IsPCRel},
-      {"fixup_xtensa_call_18", 0, 18, MCFixupKindInfo::FKF_IsPCRel},
-      {"fixup_xtensa_l32r_16", 0, 16, MCFixupKindInfo::FKF_IsPCRel},
+      {"fixup_xtensa_call_18", 0, 18,
+       MCFixupKindInfo::FKF_IsPCRel |
+           MCFixupKindInfo::FKF_IsAlignedDownTo32Bits},
+      {"fixup_xtensa_l32r_16", 0, 16,
+       MCFixupKindInfo::FKF_IsPCRel |
+           MCFixupKindInfo::FKF_IsAlignedDownTo32Bits},
   };
 
+  if (Kind < FirstTargetFixupKind)
+    return MCAsmBackend::getFixupKindInfo(Kind);
   assert(unsigned(Kind - FirstTargetFixupKind) < getNumFixupKinds() &&
          "Invalid kind!");
   return Infos[Kind - FirstTargetFixupKind];
@@ -79,6 +86,7 @@ static uint64_t adjustFixupValue(const MCFixup &Fixup, uint64_t Value,
   case FK_Data_8:
     return Value;
   case Xtensa::fixup_xtensa_branch_6: {
+    Value -= 4;
     if (!isInt<6>(Value))
       Ctx.reportError(Fixup.getLoc(), "fixup value out of range");
     unsigned Hi2 = (Value >> 4) & 0x3;
@@ -86,25 +94,33 @@ static uint64_t adjustFixupValue(const MCFixup &Fixup, uint64_t Value,
     return (Hi2 << 4) | (Lo4 << 12);
   }
   case Xtensa::fixup_xtensa_branch_8:
+    Value -= 4;
     if (!isInt<8>(Value))
       Ctx.reportError(Fixup.getLoc(), "fixup value out of range");
-    return (Value & 0x3f) << 16;
+    return (Value & 0xff) << 16;
+  case Xtensa::fixup_xtensa_branch_12:
+    Value -= 4;
+    if (!isInt<12>(Value))
+      Ctx.reportError(Fixup.getLoc(), "fixup value out of range");
+    return (Value & 0xfff) << 12;
   case Xtensa::fixup_xtensa_jump_18:
+    Value -= 4;
     if (!isInt<18>(Value))
       Ctx.reportError(Fixup.getLoc(), "fixup value out of range");
     return (Value & 0x3ffff) << 6;
   case Xtensa::fixup_xtensa_call_18:
+    Value -= 1;
     if (!isInt<20>(Value))
       Ctx.reportError(Fixup.getLoc(), "fixup value out of range");
     if (Value & 0x3)
       Ctx.reportError(Fixup.getLoc(), "fixup value must be 4-byte aligned");
     return (Value & 0x3ffff) << 6;
   case Xtensa::fixup_xtensa_l32r_16:
-    if (!isInt<18>(Value))
+    if (!isInt<18>(Value) && (Value & 0x20000))
       Ctx.reportError(Fixup.getLoc(), "fixup value out of range");
     if (Value & 0x3)
       Ctx.reportError(Fixup.getLoc(), "fixup value must be 4-byte aligned");
-    return (Value & 0xffff) << 8;
+    return (Value & 0x3fffc) << 6;
   }
 }
 
@@ -121,7 +137,6 @@ void XtensaMCAsmBackend::applyFixup(const MCAssembler &Asm,
                                     const MCFixup &Fixup, const MCValue &Target,
                                     MutableArrayRef<char> Data, uint64_t Value,
                                     bool IsResolved) const {
-  MCFixupKind Kind = Fixup.getKind();
   MCContext &Ctx = Asm.getContext();
   Value = adjustFixupValue(Fixup, Value, Ctx);
 

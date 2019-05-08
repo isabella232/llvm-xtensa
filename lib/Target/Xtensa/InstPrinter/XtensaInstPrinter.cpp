@@ -195,7 +195,7 @@ void XtensaInstPrinter::printImmn_AsmOperand(const MCInst *MI, int OpNum,
                                              raw_ostream &O) {
   if (MI->getOperand(OpNum).isImm()) {
     int64_t Value = MI->getOperand(OpNum).getImm();
-    assert((Value >= -1 && Value <= 15) && "Invalid immn argument");
+    assert((Value >= -1 && (Value != 0) && Value <= 15) && "Invalid immn argument");
     O << Value;
   } else
     printOperand(MI, OpNum, O);
@@ -216,6 +216,36 @@ void XtensaInstPrinter::printShimm5_AsmOperand(const MCInst *MI, int OpNum,
   if (MI->getOperand(OpNum).isImm()) {
     int64_t Value = MI->getOperand(OpNum).getImm();
     assert((Value >= 0 && Value <= 31) && "Invalid shimm5 argument");
+    O << Value;
+  } else
+    printOperand(MI, OpNum, O);
+}
+
+void XtensaInstPrinter::printShimm16_31_AsmOperand(const MCInst *MI, int OpNum,
+                                               raw_ostream &O) {
+  if (MI->getOperand(OpNum).isImm()) {
+    int64_t Value = MI->getOperand(OpNum).getImm();
+    assert((Value >= 16 && Value <= 31) && "Invalid shimm5 argument");
+    O << Value;
+  } else
+    printOperand(MI, OpNum, O);
+}
+
+void XtensaInstPrinter::printShimm1_16_AsmOperand(const MCInst *MI, int OpNum,
+                                               raw_ostream &O) {
+  if (MI->getOperand(OpNum).isImm()) {
+    int64_t Value = MI->getOperand(OpNum).getImm();
+    assert((Value >= 1 && Value <= 16) && "Invalid shimm5 argument");
+    O << Value;
+  } else
+    printOperand(MI, OpNum, O);
+}
+
+void XtensaInstPrinter::printShimm17_31_AsmOperand(const MCInst *MI, int OpNum,
+                                               raw_ostream &O) {
+  if (MI->getOperand(OpNum).isImm()) {
+    int64_t Value = MI->getOperand(OpNum).getImm();
+    assert((Value >= 17 && Value <= 31) && "Invalid shimm5 argument");
     O << Value;
   } else
     printOperand(MI, OpNum, O);
@@ -326,11 +356,11 @@ void XtensaInstPrinter::printB4constu_AsmOperand(const MCInst *MI, int OpNum,
     printOperand(MI, OpNum, O);
 }
 
-void XtensaInstPrinter::printSeimm4_AsmOperand(const MCInst *MI, int OpNum,
+void XtensaInstPrinter::printSeimm7_22_AsmOperand(const MCInst *MI, int OpNum,
                                                raw_ostream &O) {
   if (MI->getOperand(OpNum).isImm()) {
     int64_t Value = MI->getOperand(OpNum).getImm();
-    assert((Value >= 7 && Value <= 22) && "Invalid seimm4 argument");
+    assert((Value >= 7 && Value <= 22) && "Invalid seimm7_22 argument");
     O << Value;
   } else
     printOperand(MI, OpNum, O);

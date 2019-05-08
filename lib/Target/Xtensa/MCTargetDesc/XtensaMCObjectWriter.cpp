@@ -32,6 +32,8 @@ public:
 protected:
   unsigned getRelocType(MCContext &Ctx, const MCValue &Target,
                         const MCFixup &Fixup, bool IsPCRel) const override;
+  bool needsRelocateWithSymbol(const MCSymbol &Sym,
+                               unsigned Type) const override;
 };
 } // namespace
 
@@ -44,7 +46,12 @@ XtensaObjectWriter::~XtensaObjectWriter() {}
 unsigned XtensaObjectWriter::getRelocType(MCContext &Ctx, const MCValue &Target,
                                           const MCFixup &Fixup,
                                           bool IsPCRel) const {
-  return MCSymbolRefExpr::VK_None;
+  switch ((unsigned)Fixup.getKind()) {
+  case FK_Data_4:
+    return ELF::R_XTENSA_32;
+  default:
+    return ELF::R_XTENSA_SLOT0_OP;
+  }
 }
 
 std::unique_ptr<MCObjectWriter>
@@ -54,3 +61,7 @@ llvm::createXtensaObjectWriter(raw_pwrite_stream &OS, uint8_t OSABI,
                                IsLittleEndian);
 }
 
+bool XtensaObjectWriter::needsRelocateWithSymbol(const MCSymbol &Sym,
+                                                 unsigned Type) const {
+  return false;
+}

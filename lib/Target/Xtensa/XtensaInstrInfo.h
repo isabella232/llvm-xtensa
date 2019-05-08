@@ -58,7 +58,7 @@ public:
                               int &FrameIndex) const override;
   void adjustStackPtr(unsigned SP, int64_t Amount, MachineBasicBlock &MBB,
                       MachineBasicBlock::iterator I) const;
-  unsigned GetInstSizeInBytes(MachineInstr *I) const;
+  unsigned getInstSizeInBytes(const MachineInstr &MI) const override;
   bool analyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
                      MachineBasicBlock *&FBB,
                      SmallVectorImpl<MachineOperand> &Cond,
@@ -92,6 +92,10 @@ public:
                             const TargetRegisterInfo *TRI) const override;
   bool
   reverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond) const override;
+  MachineBasicBlock *getBranchDestBlock(const MachineInstr &MI) const override;
+  
+  bool isBranchOffsetInRange(unsigned BranchOpc,
+                             int64_t BrOffset) const override;
 
   // Return the XtensaRegisterInfo, which this class owns.
   const XtensaRegisterInfo &getRegisterInfo() const { return RI; }

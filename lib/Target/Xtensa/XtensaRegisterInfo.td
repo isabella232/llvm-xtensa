@@ -26,7 +26,6 @@ class XtensaRegWithSubRegs<string n, list<Register> subregs>
 
 // Xtensa general purpose regs
 class ARReg<bits<4> num, string n> : XtensaReg<n> {
-  //field bits<4> number = num;
     let HWEncoding{3-0} = num;
 }
 
@@ -45,7 +44,7 @@ def a6 : ARReg<6, "a6">, DwarfRegNum<[6]>;
 def a7 : ARReg<7, "a7">, DwarfRegNum<[7]>;
 
 // Static Chain
-def a8 : ARReg<7, "a8">, DwarfRegNum<[8]>;
+def a8 : ARReg<8, "a8">, DwarfRegNum<[8]>;
 
 def a9 : ARReg<9, "a9">, DwarfRegNum<[9]>;
 def a10 : ARReg<10, "a10">, DwarfRegNum<[10]>;
@@ -65,7 +64,7 @@ def a15 : ARReg<15, "a15">, DwarfRegNum<[15]>;
 
 //Xtensa special purpose regs
 class SRReg<bits<8> num, string n> : XtensaReg<n> {
-  field bits<8> number = num;
+  let HWEncoding{7-0} = num;
 }
 
 // Shift Amount Register
@@ -83,14 +82,6 @@ def AR : RegisterClass<"Xtensa", [i32], 32, (add
   a8, a9, a10, a11, a12, a13, a14, a15,
   a7, a6, a5, a4, a3, a2, a0, sp)>;
 
-// Shift register SAR for left shifts
-//def SARL : RegisterClass<"Xtensa", [i32], 32, (add 
-//  sar)>;
-
-// Shift register SAR for right shifts
-//def SARR : RegisterClass<"Xtensa", [i32], 32, (add 
-//  sar)>;
-
 def SCOMPARER : RegisterClass<"Xtensa", [i32], 32, (add SCOMPARE1)>;
 //===----------------------------------------------------------------------===//
 // Floating-Point registers
@@ -98,7 +89,7 @@ def SCOMPARER : RegisterClass<"Xtensa", [i32], 32, (add SCOMPARE1)>;
 
 // Xtensa Floating-Point regs
 class FPReg<bits<4> num, string n> : XtensaReg<n> {
-  field bits<4> number = num;
+  let HWEncoding{3-0} = num;
 }
 //todo
 //def fp : FPReg<0, "fp">, DwarfRegNum<[16]>;
@@ -111,7 +102,7 @@ def f4 : FPReg<4, "f4">, DwarfRegNum<[23]>;
 def f5 : FPReg<5, "f5">, DwarfRegNum<[24]>;
 def f6 : FPReg<6, "f6">, DwarfRegNum<[25]>;
 def f7 : FPReg<7, "f7">, DwarfRegNum<[26]>;
-def f8 : FPReg<7, "f8">, DwarfRegNum<[27]>;
+def f8 : FPReg<8, "f8">, DwarfRegNum<[27]>;
 def f9 : FPReg<9, "f9">, DwarfRegNum<[28]>;
 def f10 : FPReg<10, "f10">, DwarfRegNum<[29]>;
 def f11 : FPReg<11, "f11">, DwarfRegNum<[30]>;
@@ -129,7 +120,7 @@ def FPR : RegisterClass<"Xtensa", [f32], 32, (add
 // Boolean registers
 //===----------------------------------------------------------------------===//
 class BReg<bits<4> num, string n> : XtensaReg<n> {
-  field bits<4> number = num;
+  let HWEncoding{3-0} = num;
 }
 
 

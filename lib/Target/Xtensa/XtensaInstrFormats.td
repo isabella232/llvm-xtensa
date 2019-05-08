@@ -127,7 +127,7 @@ class CALL_Inst<bits<4> op0, dag outs, dag ins,
 
   let Inst{23-6} = offset;
   let Inst{5-4} = n;
-  let Inst{23-20} = op0;
+  let Inst{3-0} = op0;
 }
 
 class CALLX_Inst<bits<4> op0, bits<4> op1, bits<4> op2, dag outs, dag ins, 
@@ -166,14 +166,13 @@ class BRI8_Inst<bits<4> op0, dag outs, dag ins,
   let Inst{3-0} = op0;
 }
 
-class BRI12_Inst<bits<4> op0, dag outs, dag ins, 
+class BRI12_Inst<bits<4> op0, bits<2> n, bits<2> m, dag outs, dag ins, 
                string asmstr, list<dag> pattern, InstrItinClass itin = NoItinerary>: 
                  XtensaInst24<outs, ins, asmstr, pattern, itin>
 {
   bits<12> imm12;
   bits<4> s;
-  bits<2> m;
-  bits<2> n;
+
 
   let Inst{23-12} = imm12;
   let Inst{11-8} = s;

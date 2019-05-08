@@ -128,12 +128,13 @@ bool XtensaPassConfig::addInstSelector() {
 
 void XtensaPassConfig::addIRPasses() {
   addPass(createAtomicExpandPass());
-  //	addPass(createXtensaZOLPass);
+  // addPass(createXtensaZOLPass);
 }
 
 void XtensaPassConfig::addPreEmitPass() {
-  addPass(createXtensaBranchSelectionPass());
+  // addPass(createXtensaBranchSelectionPass());
   addPass(createXtensaSizeReductionPass());
+  addPass(&BranchRelaxationPassID);
 }
 
 TargetPassConfig *XtensaTargetMachine::createPassConfig(PassManagerBase &PM) {

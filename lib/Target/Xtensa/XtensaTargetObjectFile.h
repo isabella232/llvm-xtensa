@@ -15,6 +15,7 @@
 namespace llvm {
 class XtensaTargetMachine;
 class XtensaTargetObjectFile : public TargetLoweringObjectFileELF {
+  MCSection *LiteralSection;
   MCSection *SmallDataSection;
   MCSection *SmallBSSSection;
   const XtensaTargetMachine *TM;

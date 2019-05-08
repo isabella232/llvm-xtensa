@@ -27,7 +27,8 @@ namespace {
 class XtensaMCCodeEmitter : public MCCodeEmitter {
   const MCInstrInfo &MCII;
   MCContext &Ctx;
-  bool IsLittleEndian = true; //TODO: maybe big-endian machine support is also needed. Now default is little-endian machine
+  bool IsLittleEndian = true; // TODO: maybe big-endian machine support is also
+                              // needed. Now default is little-endian machine
 
 public:
   XtensaMCCodeEmitter(const MCInstrInfo &mcii, MCContext &ctx)
@@ -59,9 +60,12 @@ private:
     const MCOperand &MO = MI.getOperand(OpNum);
     // TODO: do we need to sign extend explicitly?
     if (MO.isImm())
-      return MO.getImm() << 1;
+      // return MO.getImm() << 1;
+      return MO.getImm();
+    const MCExpr *Expr = MO.getExpr();
+    Fixups.push_back(MCFixup::create(
+        0, Expr, MCFixupKind(Xtensa::fixup_xtensa_jump_18), MI.getLoc()));
     return 0;
-    llvm_unreachable("Jump with no immediate field");
   }
 
   unsigned getBranchTargetEncoding(const MCInst &MI, unsigned int OpNum,
@@ -70,23 +74,102 @@ private:
     const MCOperand &MO = MI.getOperand(OpNum);
     if (MO.isImm())
       return static_cast<unsigned>(MO.getImm());
-    // llvm_unreachable("Unexpected operand type!");
-    const MCExpr *Expr = MO.getExpr();
-    Fixups.push_back(MCFixup::create(
-        0, Expr, MCFixupKind(Xtensa::fixup_xtensa_branch_8), MI.getLoc()));
 
-    return 0;
+    const MCExpr *Expr = MO.getExpr();
+    switch (MI.getOpcode()) {
+    case Xtensa::BEQZ:
+    case Xtensa::BGEZ:
+    case Xtensa::BLTZ:
+    case Xtensa::BNEZ:
+      Fixups.push_back(MCFixup::create(
+          0, Expr, MCFixupKind(Xtensa::fixup_xtensa_branch_12), MI.getLoc()));
+      return 0;
+    default:
+      Fixups.push_back(MCFixup::create(
+          0, Expr, MCFixupKind(Xtensa::fixup_xtensa_branch_8), MI.getLoc()));
+      return 0;
+    }
   }
 
   unsigned getCallEncoding(const MCInst &MI, unsigned int OpNum,
                            SmallVectorImpl<MCFixup> &Fixups,
                            const MCSubtargetInfo &STI) const {
+    const MCOperand &MO = MI.getOperand(OpNum);
+    if (MO.isImm()) {
+      int32_t res = MO.getImm();
+      if (res & 0x3) {
+        llvm_unreachable("Unexpected operand value!");
+      }
+      res >>= 2;
+      return res;
+    }
+
+    assert((MO.isExpr()) && "Unexpected operand value!");
+    const MCExpr *Expr = MO.getExpr();
+    Fixups.push_back(MCFixup::create(
+        0, Expr, MCFixupKind(Xtensa::fixup_xtensa_call_18), MI.getLoc()));
     return 0;
   }
 
   unsigned getMemRegEncoding(const MCInst &MI, unsigned OpNo,
+                             SmallVectorImpl<MCFixup> &Fixups,
+                             const MCSubtargetInfo &STI) const;
+
+  unsigned getImm8OpValue(const MCInst &MI, unsigned OpNo,
+                          SmallVectorImpl<MCFixup> &Fixups,
+                          const MCSubtargetInfo &STI) const;
+
+  unsigned getImm8_sh8OpValue(const MCInst &MI, unsigned OpNo,
+                              SmallVectorImpl<MCFixup> &Fixups,
+                              const MCSubtargetInfo &STI) const;
+
+  unsigned getImm7nOpValue(const MCInst &MI, unsigned OpNo,
+                           SmallVectorImpl<MCFixup> &Fixups,
+                           const MCSubtargetInfo &STI) const;
+
+  unsigned getImm12OpValue(const MCInst &MI, unsigned OpNo,
+                           SmallVectorImpl<MCFixup> &Fixups,
+                           const MCSubtargetInfo &STI) const;
+
+  unsigned getImmnOpValue(const MCInst &MI, unsigned OpNo,
+                          SmallVectorImpl<MCFixup> &Fixups,
+                          const MCSubtargetInfo &STI) const;
+
+  unsigned getShimm4OpValue(const MCInst &MI, unsigned OpNo,
                             SmallVectorImpl<MCFixup> &Fixups,
                             const MCSubtargetInfo &STI) const;
+
+  unsigned getShimm1_16OpValue(const MCInst &MI, unsigned OpNo,
+                               SmallVectorImpl<MCFixup> &Fixups,
+                               const MCSubtargetInfo &STI) const;
+
+  unsigned getShimm17_31OpValue(const MCInst &MI, unsigned OpNo,
+                                SmallVectorImpl<MCFixup> &Fixups,
+                                const MCSubtargetInfo &STI) const;
+
+  unsigned getShimm16_31OpValue(const MCInst &MI, unsigned OpNo,
+                                SmallVectorImpl<MCFixup> &Fixups,
+                                const MCSubtargetInfo &STI) const;
+
+  unsigned getShimm5OpValue(const MCInst &MI, unsigned OpNo,
+                            SmallVectorImpl<MCFixup> &Fixups,
+                            const MCSubtargetInfo &STI) const;
+
+  unsigned getEntry_Imm12OpValue(const MCInst &MI, unsigned OpNo,
+                                 SmallVectorImpl<MCFixup> &Fixups,
+                                 const MCSubtargetInfo &STI) const;
+
+  unsigned getB4constOpValue(const MCInst &MI, unsigned OpNo,
+                             SmallVectorImpl<MCFixup> &Fixups,
+                             const MCSubtargetInfo &STI) const;
+
+  unsigned getB4constuOpValue(const MCInst &MI, unsigned OpNo,
+                              SmallVectorImpl<MCFixup> &Fixups,
+                              const MCSubtargetInfo &STI) const;
+
+  unsigned getShimmSeimm7_22OpValue(const MCInst &MI, unsigned OpNo,
+                                    SmallVectorImpl<MCFixup> &Fixups,
+                                    const MCSubtargetInfo &STI) const;
 };
 } // namespace
 
@@ -102,17 +185,15 @@ void XtensaMCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
   uint64_t Bits = getBinaryCodeForInstr(MI, Fixups, STI);
   unsigned Size = MCII.get(MI.getOpcode()).getSize();
 
-  if (IsLittleEndian)
-  {
+  if (IsLittleEndian) {
     // Little-endian insertion of Size bytes.
     unsigned ShiftValue = 0;
     for (unsigned I = 0; I != Size; ++I) {
       OS << uint8_t(Bits >> ShiftValue);
       ShiftValue += 8;
     }
-  } else
-  {
-    //TODO Big-endian insertion of Size bytes.
+  } else {
+    // TODO Big-endian insertion of Size bytes.
   }
 }
 
@@ -122,13 +203,13 @@ XtensaMCCodeEmitter::getMachineOpValue(const MCInst &MI, const MCOperand &MO,
                                        const MCSubtargetInfo &STI) const {
   if (MO.isReg())
     return Ctx.getRegisterInfo()->getEncodingValue(MO.getReg());
-
-  if (MO.isImm())
-    return static_cast<unsigned>(MO.getImm());
-
+  if (MO.isImm()) {
+    long res = static_cast<unsigned>(MO.getImm());
+    return res;
+  }
   const MCExpr *Expr = MO.getExpr();
-  Fixups.push_back(
-      MCFixup::create(0, Expr, MCFixupKind(Xtensa::fixup_xtensa_l32r_16), MI.getLoc()));
+  Fixups.push_back(MCFixup::create(
+      0, Expr, MCFixupKind(Xtensa::fixup_xtensa_l32r_16), MI.getLoc()));
   return 0;
 }
 
@@ -138,14 +219,279 @@ XtensaMCCodeEmitter::getMemRegEncoding(const MCInst &MI, unsigned OpNo,
                                        const MCSubtargetInfo &STI) const {
   assert(MI.getOperand(OpNo).isImm());
 
-  unsigned OffBits = getMachineOpValue(MI, MI.getOperand(OpNo), Fixups, STI)
-                     << 4;
+  long res = static_cast<unsigned>(MI.getOperand(OpNo).getImm());
+  switch (MI.getOpcode()) {
+  case Xtensa::S16I:
+  case Xtensa::L16SI:
+  case Xtensa::L16UI:
+    if (res & 0x1) {
+      llvm_unreachable("Unexpected operand value!");
+    }
+    res >>= 1;
+    break;
+  case Xtensa::S32I:
+  case Xtensa::L32I:
+  case Xtensa::S32I_N:
+  case Xtensa::L32I_N:
+  case Xtensa::S32F:
+  case Xtensa::L32F:
+    if (res & 0x3) {
+      llvm_unreachable("Unexpected operand value!");
+    }
+    res >>= 2;
+    break;
+  }
 
+  unsigned OffBits = res << 4;
   unsigned RegBits =
       getMachineOpValue(MI, MI.getOperand(OpNo + 1), Fixups, STI);
 
   return (OffBits & 0xFF0) | RegBits;
 }
 
-#include "XtensaGenMCCodeEmitter.inc"
+unsigned XtensaMCCodeEmitter::getImm8OpValue(const MCInst &MI, unsigned OpNo,
+                                             SmallVectorImpl<MCFixup> &Fixups,
+                                             const MCSubtargetInfo &STI) const {
+  const MCOperand &MO = MI.getOperand(OpNo);
+  int32_t res = MO.getImm();
 
+  assert(((res >= -128) && (res <= 127)) && "Unexpected operand value!");
+
+  return (res & 0xff);
+}
+
+unsigned
+XtensaMCCodeEmitter::getImm8_sh8OpValue(const MCInst &MI, unsigned OpNo,
+                                        SmallVectorImpl<MCFixup> &Fixups,
+                                        const MCSubtargetInfo &STI) const {
+  const MCOperand &MO = MI.getOperand(OpNo);
+  int32_t res = MO.getImm();
+
+  assert(((res >= -32768) && (res <= 32512) && ((res & 0xff) == 0)) &&
+         "Unexpected operand value!");
+
+  return res & 0xffff;
+}
+
+unsigned
+XtensaMCCodeEmitter::getImm7nOpValue(const MCInst &MI, unsigned OpNo,
+                                     SmallVectorImpl<MCFixup> &Fixups,
+                                     const MCSubtargetInfo &STI) const {
+  const MCOperand &MO = MI.getOperand(OpNo);
+  int32_t res = MO.getImm();
+
+  assert(((res >= -32) && (res <= 95)) && "Unexpected operand value!");
+
+  return (res & 0x7f);
+}
+
+unsigned
+XtensaMCCodeEmitter::getImm12OpValue(const MCInst &MI, unsigned OpNo,
+                                     SmallVectorImpl<MCFixup> &Fixups,
+                                     const MCSubtargetInfo &STI) const {
+  const MCOperand &MO = MI.getOperand(OpNo);
+  int32_t res = MO.getImm();
+
+  assert(((res >= -2048) && (res <= 2047)) && "Unexpected operand value!");
+
+  return (res & 0xfff);
+}
+
+unsigned XtensaMCCodeEmitter::getImmnOpValue(const MCInst &MI, unsigned OpNo,
+                                             SmallVectorImpl<MCFixup> &Fixups,
+                                             const MCSubtargetInfo &STI) const {
+  const MCOperand &MO = MI.getOperand(OpNo);
+  int32_t tmp = MO.getImm();
+
+  assert(((tmp >= -1) && (tmp <= 15) && (tmp != 0)) &&
+         "Unexpected operand value!");
+
+  if (tmp < 0)
+    return 0;
+  else
+    return tmp;
+}
+
+unsigned
+XtensaMCCodeEmitter::getShimm4OpValue(const MCInst &MI, unsigned OpNo,
+                                      SmallVectorImpl<MCFixup> &Fixups,
+                                      const MCSubtargetInfo &STI) const {
+  const MCOperand &MO = MI.getOperand(OpNo);
+  long res = static_cast<unsigned>(MO.getImm());
+
+  assert(((res >= 0) && (res <= 15)) && "Unexpected operand value!");
+
+  return res & 0xf;
+}
+
+unsigned
+XtensaMCCodeEmitter::getShimm1_16OpValue(const MCInst &MI, unsigned OpNo,
+                                         SmallVectorImpl<MCFixup> &Fixups,
+                                         const MCSubtargetInfo &STI) const {
+  const MCOperand &MO = MI.getOperand(OpNo);
+  long res = static_cast<unsigned>(MO.getImm());
+
+  assert(((res >= 1) && (res <= 16)) && "Unexpected operand value!");
+
+  return (32 - res) & 0xf;
+}
+
+unsigned
+XtensaMCCodeEmitter::getShimm17_31OpValue(const MCInst &MI, unsigned OpNo,
+                                          SmallVectorImpl<MCFixup> &Fixups,
+                                          const MCSubtargetInfo &STI) const {
+  const MCOperand &MO = MI.getOperand(OpNo);
+  long res = static_cast<unsigned>(MO.getImm());
+
+  assert(((res >= 17) && (res <= 31)) && "Unexpected operand value!");
+
+  return (32 - res) & 0xf;
+}
+
+unsigned
+XtensaMCCodeEmitter::getShimm16_31OpValue(const MCInst &MI, unsigned OpNo,
+                                          SmallVectorImpl<MCFixup> &Fixups,
+                                          const MCSubtargetInfo &STI) const {
+  const MCOperand &MO = MI.getOperand(OpNo);
+  long res = static_cast<unsigned>(MO.getImm());
+
+  assert(((res >= 16) && (res <= 31)) && "Unexpected operand value!");
+
+  return res & 0xf;
+}
+
+unsigned
+XtensaMCCodeEmitter::getShimm5OpValue(const MCInst &MI, unsigned OpNo,
+                                      SmallVectorImpl<MCFixup> &Fixups,
+                                      const MCSubtargetInfo &STI) const {
+  const MCOperand &MO = MI.getOperand(OpNo);
+  long res = static_cast<unsigned>(MO.getImm());
+
+  assert(((res & 0x1f) == res) && "Unexpected operand value!");
+
+  return res;
+}
+
+unsigned XtensaMCCodeEmitter::getShimmSeimm7_22OpValue(
+    const MCInst &MI, unsigned OpNo, SmallVectorImpl<MCFixup> &Fixups,
+    const MCSubtargetInfo &STI) const {
+  const MCOperand &MO = MI.getOperand(OpNo);
+  long res = static_cast<unsigned>(MO.getImm());
+
+  res -= 7;
+  assert(((res & 0xf) == res) && "Unexpected operand value!");
+
+  return res;
+}
+
+unsigned
+XtensaMCCodeEmitter::getEntry_Imm12OpValue(const MCInst &MI, unsigned OpNo,
+                                           SmallVectorImpl<MCFixup> &Fixups,
+                                           const MCSubtargetInfo &STI) const {
+  const MCOperand &MO = MI.getOperand(OpNo);
+  long res = static_cast<unsigned>(MO.getImm());
+
+  assert(((res & 0x7) == 0) && "Unexpected operand value!");
+
+  return res;
+}
+
+unsigned
+XtensaMCCodeEmitter::getB4constOpValue(const MCInst &MI, unsigned OpNo,
+                                       SmallVectorImpl<MCFixup> &Fixups,
+                                       const MCSubtargetInfo &STI) const {
+  const MCOperand &MO = MI.getOperand(OpNo);
+  long res = static_cast<unsigned>(MO.getImm());
+
+  switch (res) {
+  case 0xffffffff:
+    res = 0;
+    break;
+  case 1:
+  case 2:
+  case 3:
+  case 4:
+  case 5:
+  case 6:
+  case 7:
+  case 8:
+    break;
+  case 10:
+    res = 9;
+    break;
+  case 12:
+    res = 10;
+    break;
+  case 16:
+    res = 11;
+    break;
+  case 32:
+    res = 12;
+    break;
+  case 64:
+    res = 13;
+    break;
+  case 128:
+    res = 14;
+    break;
+  case 256:
+    res = 15;
+    break;
+  default:
+    llvm_unreachable("Unexpected operand value!");
+  }
+
+  return res;
+}
+
+unsigned
+XtensaMCCodeEmitter::getB4constuOpValue(const MCInst &MI, unsigned OpNo,
+                                        SmallVectorImpl<MCFixup> &Fixups,
+                                        const MCSubtargetInfo &STI) const {
+  const MCOperand &MO = MI.getOperand(OpNo);
+  long res = static_cast<unsigned>(MO.getImm());
+
+  switch (res) {
+  case 32768:
+    res = 0;
+    break;
+  case 65536:
+    res = 1;
+    break;
+  case 2:
+  case 3:
+  case 4:
+  case 5:
+  case 6:
+  case 7:
+  case 8:
+    break;
+  case 10:
+    res = 9;
+    break;
+  case 12:
+    res = 10;
+    break;
+  case 16:
+    res = 11;
+    break;
+  case 32:
+    res = 12;
+    break;
+  case 64:
+    res = 13;
+    break;
+  case 128:
+    res = 14;
+    break;
+  case 256:
+    res = 15;
+    break;
+  default:
+    llvm_unreachable("Unexpected operand value!");
+  }
+
+  return res;
+}
+
+#include "XtensaGenMCCodeEmitter.inc"

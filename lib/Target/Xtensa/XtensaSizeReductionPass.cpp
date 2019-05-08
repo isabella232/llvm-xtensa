@@ -135,6 +135,7 @@ bool XtensaSizeReduce::runOnMachineFunction(MachineFunction &MF) {
 
   XtensaII = static_cast<const XtensaInstrInfo *>(Subtarget->getInstrInfo());
 
+  return false;
   bool Modified = false;
   MachineFunction::iterator I = MF.begin(), E = MF.end();
 
