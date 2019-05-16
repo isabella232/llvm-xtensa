@@ -130,6 +130,10 @@ void XtensaAsmPrinter::EmitMachineConstantPoolValue(
     std::string str("\t.literal ");
     str += LblSym->getName();
     str += ", ";
+
+    StringRef prefix = ACPV->getModifierPrefixText();
+    str += prefix;
+
     str += MCSym->getName();
 
     StringRef modifier = ACPV->getModifierText();

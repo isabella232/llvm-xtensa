@@ -1,5 +1,4 @@
-//===- XtensaInstPrinter.cpp - Convert Xtensa MCInst to assembly syntax
-//--------===//
+//===- XtensaInstPrinter.cpp - Convert Xtensa MCInst to assembly syntax --------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -13,6 +12,7 @@
 //===---------------------------------------------------------------------------===//
 
 #include "XtensaInstPrinter.h"
+#include "MCTargetDesc/XtensaMCExpr.h"
 #include "XtensaInstrInfo.h"
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/MC/MCExpr.h"
@@ -44,6 +44,8 @@ static void printExpr(const MCExpr *Expr, raw_ostream &OS) {
     const MCConstantExpr *CE = dyn_cast<MCConstantExpr>(BE->getRHS());
     assert(SRE && CE && "Binary expression must be sym+const.");
     Offset = CE->getValue();
+  } else if (const XtensaMCExpr *XE = dyn_cast<XtensaMCExpr>(Expr)) {
+    SRE = dyn_cast<MCSymbolRefExpr>(XE->getSubExpr());
   } else if (!(SRE = dyn_cast<MCSymbolRefExpr>(Expr)))
     assert(false && "Unexpected MCExpr type.");
 
@@ -195,7 +197,8 @@ void XtensaInstPrinter::printImmn_AsmOperand(const MCInst *MI, int OpNum,
                                              raw_ostream &O) {
   if (MI->getOperand(OpNum).isImm()) {
     int64_t Value = MI->getOperand(OpNum).getImm();
-    assert((Value >= -1 && (Value != 0) && Value <= 15) && "Invalid immn argument");
+    assert((Value >= -1 && (Value != 0) && Value <= 15) &&
+           "Invalid immn argument");
     O << Value;
   } else
     printOperand(MI, OpNum, O);
@@ -222,7 +225,7 @@ void XtensaInstPrinter::printShimm5_AsmOperand(const MCInst *MI, int OpNum,
 }
 
 void XtensaInstPrinter::printShimm16_31_AsmOperand(const MCInst *MI, int OpNum,
-                                               raw_ostream &O) {
+                                                   raw_ostream &O) {
   if (MI->getOperand(OpNum).isImm()) {
     int64_t Value = MI->getOperand(OpNum).getImm();
     assert((Value >= 16 && Value <= 31) && "Invalid shimm5 argument");
@@ -232,7 +235,7 @@ void XtensaInstPrinter::printShimm16_31_AsmOperand(const MCInst *MI, int OpNum,
 }
 
 void XtensaInstPrinter::printShimm1_16_AsmOperand(const MCInst *MI, int OpNum,
-                                               raw_ostream &O) {
+                                                  raw_ostream &O) {
   if (MI->getOperand(OpNum).isImm()) {
     int64_t Value = MI->getOperand(OpNum).getImm();
     assert((Value >= 1 && Value <= 16) && "Invalid shimm5 argument");
@@ -242,7 +245,7 @@ void XtensaInstPrinter::printShimm1_16_AsmOperand(const MCInst *MI, int OpNum,
 }
 
 void XtensaInstPrinter::printShimm17_31_AsmOperand(const MCInst *MI, int OpNum,
-                                               raw_ostream &O) {
+                                                   raw_ostream &O) {
   if (MI->getOperand(OpNum).isImm()) {
     int64_t Value = MI->getOperand(OpNum).getImm();
     assert((Value >= 17 && Value <= 31) && "Invalid shimm5 argument");
@@ -357,7 +360,7 @@ void XtensaInstPrinter::printB4constu_AsmOperand(const MCInst *MI, int OpNum,
 }
 
 void XtensaInstPrinter::printSeimm7_22_AsmOperand(const MCInst *MI, int OpNum,
-                                               raw_ostream &O) {
+                                                  raw_ostream &O) {
   if (MI->getOperand(OpNum).isImm()) {
     int64_t Value = MI->getOperand(OpNum).getImm();
     assert((Value >= 7 && Value <= 22) && "Invalid seimm7_22 argument");

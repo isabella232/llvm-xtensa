@@ -26,23 +26,6 @@
 namespace llvm {
 
 class XtensaTargetMachine;
-
-namespace XtensaII {
-// TODO
-enum {
-  // Masks out the bits for the access model.
-  MO_SYMBOL_MODIFIER = (1 << 0),
-
-  // @GOT (aka @GOTENT)
-  MO_GOT = (1 << 0),
-
-  MO_ABS_HI,
-  MO_ABS_LO,
-  MO_TPREL_HI,
-  MO_TPREL_LO
-};
-} // namespace XtensaII
-
 class XtensaSubtarget;
 class XtensaInstrInfo : public XtensaGenInstrInfo {
   const XtensaRegisterInfo RI;

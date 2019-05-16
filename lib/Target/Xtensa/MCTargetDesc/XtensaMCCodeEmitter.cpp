@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #define DEBUG_TYPE "mccodeemitter"
+#include "MCTargetDesc/XtensaMCExpr.h"
 #include "MCTargetDesc/XtensaMCFixupKinds.h"
 #include "MCTargetDesc/XtensaMCTargetDesc.h"
 #include "llvm/MC/MCCodeEmitter.h"
@@ -170,6 +171,9 @@ private:
   unsigned getShimmSeimm7_22OpValue(const MCInst &MI, unsigned OpNo,
                                     SmallVectorImpl<MCFixup> &Fixups,
                                     const MCSubtargetInfo &STI) const;
+
+  unsigned getExprOpValue(const MCExpr *Expr, SmallVectorImpl<MCFixup> &Fixups,
+                          const MCSubtargetInfo &STI) const;
 };
 } // namespace
 
@@ -197,6 +201,52 @@ void XtensaMCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
   }
 }
 
+unsigned XtensaMCCodeEmitter::getExprOpValue(const MCExpr *Expr,
+                                             SmallVectorImpl<MCFixup> &Fixups,
+                                             const MCSubtargetInfo &STI) const {
+  int64_t Res;
+
+  if (Expr->evaluateAsAbsolute(Res))
+    return Res;
+
+  MCExpr::ExprKind Kind = Expr->getKind();
+  if (Kind == MCExpr::Constant) {
+    return cast<MCConstantExpr>(Expr)->getValue();
+  }
+
+  if (Kind == MCExpr::Binary) {
+    unsigned Res =
+        getExprOpValue(cast<MCBinaryExpr>(Expr)->getLHS(), Fixups, STI);
+    Res += getExprOpValue(cast<MCBinaryExpr>(Expr)->getRHS(), Fixups, STI);
+    return Res;
+  }
+
+  Xtensa::FixupKind FixupKind = Xtensa::fixup_xtensa_l32r_16;
+  if (Kind == MCExpr::Target) {
+    const XtensaMCExpr *XtensaExpr = cast<XtensaMCExpr>(Expr);
+
+    switch (XtensaExpr->getKind()) {
+    case XtensaMCExpr::VK_Xtensa_None:
+      FixupKind = Xtensa::fixup_xtensa_l32r_16;
+      break;
+    case XtensaMCExpr::VK_Xtensa_TPREL:
+      FixupKind = Xtensa::fixup_xtensa_tprel_l32r_16;
+      break;
+    case XtensaMCExpr::VK_Xtensa_PLT:
+      FixupKind = Xtensa::fixup_xtensa_plt_l32r_16;
+      break;
+    case XtensaMCExpr::VK_Xtensa_Invalid:
+      llvm_unreachable("Unhandled fixup kind!");
+    }
+  } else if (Kind == MCExpr::SymbolRef &&
+             cast<MCSymbolRefExpr>(Expr)->getKind() ==
+                 MCSymbolRefExpr::VK_None) {
+    llvm_unreachable("Unhandled fixup kind!");
+  }
+  Fixups.push_back(MCFixup::create(0, Expr, MCFixupKind(FixupKind)));
+  return 0;
+}
+
 unsigned
 XtensaMCCodeEmitter::getMachineOpValue(const MCInst &MI, const MCOperand &MO,
                                        SmallVectorImpl<MCFixup> &Fixups,
@@ -207,10 +257,10 @@ XtensaMCCodeEmitter::getMachineOpValue(const MCInst &MI, const MCOperand &MO,
     long res = static_cast<unsigned>(MO.getImm());
     return res;
   }
-  const MCExpr *Expr = MO.getExpr();
-  Fixups.push_back(MCFixup::create(
-      0, Expr, MCFixupKind(Xtensa::fixup_xtensa_l32r_16), MI.getLoc()));
-  return 0;
+
+  // MO must be an Expr.
+  assert(MO.isExpr());
+  return getExprOpValue(MO.getExpr(), Fixups, STI);
 }
 
 unsigned

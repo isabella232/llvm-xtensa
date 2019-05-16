@@ -49,6 +49,10 @@ unsigned XtensaObjectWriter::getRelocType(MCContext &Ctx, const MCValue &Target,
   switch ((unsigned)Fixup.getKind()) {
   case FK_Data_4:
     return ELF::R_XTENSA_32;
+  case Xtensa::fixup_xtensa_tprel_l32r_16:
+    return ELF::R_XTENSA_TLS_TPOFF;
+  case Xtensa::fixup_xtensa_plt_l32r_16:
+    return ELF::R_XTENSA_PLT;
   default:
     return ELF::R_XTENSA_SLOT0_OP;
   }

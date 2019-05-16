@@ -13,6 +13,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "XtensaMCInstLower.h"
+#include "MCTargetDesc/XtensaBaseInfo.h"
+#include "MCTargetDesc/XtensaMCExpr.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/IR/Mangler.h"
@@ -28,13 +30,6 @@ XtensaMCInstLower::XtensaMCInstLower(MCContext &ctx,
 
 MCSymbol *
 XtensaMCInstLower::GetExternalSymbolSymbol(const MachineOperand &MO) const {
-  /*
-  switch (MO.getTargetFlags())
-  {
-    default: llvm_unreachable("Unknown target flag on GV operand");
-    case 0: break;
-  }
-  */
   return Printer.GetExternalSymbolSymbol(MO.getSymbolName());
 }
 
@@ -58,8 +53,22 @@ MCOperand
 XtensaMCInstLower::LowerSymbolOperand(const MachineOperand &MO,
                                       MachineOperand::MachineOperandType MOTy,
                                       unsigned Offset) const {
-  MCSymbolRefExpr::VariantKind Kind = MCSymbolRefExpr::VK_None;
   const MCSymbol *Symbol;
+  XtensaMCExpr::VariantKind Kind;
+
+  switch (MO.getTargetFlags()) {
+  default:
+    llvm_unreachable("Unknown target flag on GV operand");
+  case XtensaII::MO_NO_FLAG:
+    Kind = XtensaMCExpr::VK_Xtensa_None;
+    break;
+  case XtensaII::MO_TPREL:
+    Kind = XtensaMCExpr::VK_Xtensa_TPREL;
+    break;
+  case XtensaII::MO_PLT:
+    Kind = XtensaMCExpr::VK_Xtensa_PLT;
+    break;
+  }
 
   switch (MOTy) {
   case MachineOperand::MO_MachineBasicBlock:
@@ -88,17 +97,20 @@ XtensaMCInstLower::LowerSymbolOperand(const MachineOperand &MO,
     llvm_unreachable("<unknown operand type>");
   }
 
-  const MCSymbolRefExpr *MCSym = MCSymbolRefExpr::create(Symbol, Kind, Ctx);
+  const MCExpr *ME =
+      MCSymbolRefExpr::create(Symbol, MCSymbolRefExpr::VK_None, Ctx);
 
-  if (!Offset)
-    return MCOperand::createExpr(MCSym);
+  ME = XtensaMCExpr::create(ME, Kind, Ctx);
 
-  // Assume offset is never negative.
-  assert(Offset > 0);
+  if (Offset) {
+    // Assume offset is never negative.
+    assert(Offset > 0);
 
-  const MCConstantExpr *OffsetExpr = MCConstantExpr::create(Offset, Ctx);
-  const MCBinaryExpr *Add = MCBinaryExpr::createAdd(MCSym, OffsetExpr, Ctx);
-  return MCOperand::createExpr(Add);
+    const MCConstantExpr *OffsetExpr = MCConstantExpr::create(Offset, Ctx);
+    ME = MCBinaryExpr::createAdd(ME, OffsetExpr, Ctx);
+  }
+
+  return MCOperand::createExpr(ME);
 }
 
 MCOperand XtensaMCInstLower::lowerOperand(const MachineOperand &MO,

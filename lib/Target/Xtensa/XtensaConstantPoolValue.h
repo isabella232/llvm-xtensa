@@ -39,7 +39,8 @@ enum XtensaCPKind {
 
 enum XtensaCPModifier {
   no_modifier, // None
-  TPOFF        // Thread Pointer Offset
+  TPOFF,       // Thread Pointer Offset
+  TLS_EMUL     // TLS Emulation
 };
 } // namespace XtensaCP
 
@@ -88,6 +89,7 @@ public:
   XtensaCP::XtensaCPModifier getModifier() const { return Modifier; }
   bool hasModifier() const { return Modifier != XtensaCP::no_modifier; }
   StringRef getModifierText() const;
+  StringRef getModifierPrefixText() const;
 
   bool mustAddCurrentAddress() const { return AddCurrentAddress; }
 

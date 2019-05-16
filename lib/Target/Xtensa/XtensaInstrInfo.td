@@ -971,7 +971,7 @@ def : Pat<(atomic_store_8  addr_ish1:$addr, AR:$t), (S8I AR:$t, addr_ish1:$addr)
 def : Pat<(atomic_store_16 addr_ish2:$addr, AR:$t), (S16I AR:$t, addr_ish2:$addr)>;
 def : Pat<(atomic_store_32 addr_ish4:$addr, AR:$t), (S32I AR:$t, addr_ish4:$addr)>;
 
-let usesCustomInserter = 1 in
+let usesCustomInserter = 1, Predicates = [HasS32C1I] in
 {
 	def ATOMIC_CMP_SWAP_8_P: Pseudo<(outs AR:$dst), (ins AR:$ptr, AR:$cmp, AR:$swap),
 										"!atomic_cmp_swap_8_p, $dst, $ptr, $cmp, $swap",
@@ -1104,9 +1104,13 @@ let mayStore = 1, mayLoad = 1, usesCustomInserter = 1, Predicates = [HasS32C1I] 
               "s32c1i\t$t, $addr", 
 			   []>
   {
-    let r = 0x06;
+    bits<12> addr;
+
+    let r = 0x0e;
 	let Uses = [SCOMPARE1];
 	let Constraints = "$a = $t";
+    let imm8{7-0} = addr{11-4};
+    let s{3-0} = addr{3-0};
   }
 }
 
@@ -1114,6 +1118,7 @@ def WSR_SCOMPARE1: RSR_Inst<0x00, 0x03, 0x01, (outs), (ins AR:$t),
 					"wsr\t$t, SCOMPARE1", [(Xtensa_wsr AR:$t)]>, Requires<[HasS32C1I]>
 {
 	let Defs = [SCOMPARE1];
+	let sr = 12;
 }
 
 def RUR_THREADPTR: RRR_Inst<0x00, 0x03, 0x0e, (outs AR:$dst), (ins),

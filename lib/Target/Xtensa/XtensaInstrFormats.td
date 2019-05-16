@@ -108,12 +108,12 @@ class RSR_Inst<bits<4> op0, bits<4> op1, bits<4> op2, dag outs, dag ins,
                string asmstr, list<dag> pattern, InstrItinClass itin = NoItinerary>: 
                  XtensaInst24<outs, ins, asmstr, pattern, itin>
 {
-  bits<8> rs;
+  bits<8> sr;
   bits<4> t;
 
   let Inst{23-20} = op2;
   let Inst{19-16} = op1;
-  let Inst{15-8} = rs;
+  let Inst{15-8} = sr;
   let Inst{7-4} = t;
   let Inst{3-0} = op0;
 }

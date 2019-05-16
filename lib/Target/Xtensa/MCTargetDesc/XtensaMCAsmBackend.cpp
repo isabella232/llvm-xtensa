@@ -65,7 +65,12 @@ XtensaMCAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
       {"fixup_xtensa_l32r_16", 0, 16,
        MCFixupKindInfo::FKF_IsPCRel |
            MCFixupKindInfo::FKF_IsAlignedDownTo32Bits},
-  };
+      {"fixup_xtensa_tprel_l32r_16", 0, 16,
+       MCFixupKindInfo::FKF_IsPCRel |
+           MCFixupKindInfo::FKF_IsAlignedDownTo32Bits},
+      {"fixup_xtensa_plt_l32r_16", 0, 16,
+       MCFixupKindInfo::FKF_IsPCRel |
+           MCFixupKindInfo::FKF_IsAlignedDownTo32Bits}};
 
   if (Kind < FirstTargetFixupKind)
     return MCAsmBackend::getFixupKindInfo(Kind);
@@ -115,6 +120,8 @@ static uint64_t adjustFixupValue(const MCFixup &Fixup, uint64_t Value,
     if (Value & 0x3)
       Ctx.reportError(Fixup.getLoc(), "fixup value must be 4-byte aligned");
     return (Value & 0x3ffff) << 6;
+  case Xtensa::fixup_xtensa_plt_l32r_16:
+  case Xtensa::fixup_xtensa_tprel_l32r_16:
   case Xtensa::fixup_xtensa_l32r_16:
     if (!isInt<18>(Value) && (Value & 0x20000))
       Ctx.reportError(Fixup.getLoc(), "fixup value out of range");

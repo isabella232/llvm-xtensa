@@ -76,7 +76,7 @@ def FeatureS32C1I : SubtargetFeature<"s32c1i", "HasS32C1I", "true",
 def HasS32C1I : Predicate<"Subtarget->hasS32C1I()">,
                            AssemblerPredicate<"FeatureS32C1I">;
 						   						   
-def FeatureTHREADPTR : SubtargetFeature<"s32c1i", "HasTHREADPTR", "true",
+def FeatureTHREADPTR : SubtargetFeature<"threadptr", "HasTHREADPTR", "true",
                     "Enable Xtensa THREADPTR option">;
 def HasTHREADPTR : Predicate<"Subtarget->hasTHREADPTR()">,
                            AssemblerPredicate<"FeatureTHREADPTR">;
