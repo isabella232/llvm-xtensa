@@ -56,11 +56,13 @@ public:
                               MachineBasicBlock::iterator I,
                               MachineBasicBlock *TBB,
                               ArrayRef<MachineOperand> Cond,
-                              const DebugLoc &DL) const;
+                              const DebugLoc &DL,
+                              int *BytesAdded) const;
   unsigned InsertConstBranchAtInst(MachineBasicBlock &MBB, MachineInstr *I,
                                    int64_t offset,
                                    ArrayRef<MachineOperand> Cond,
-                                   DebugLoc DL) const;
+                                   DebugLoc DL,
+                                   int *BytesAdded) const;
   void copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
                    const DebugLoc &DL, unsigned DestReg, unsigned SrcReg,
                    bool KillSrc) const override;

@@ -825,11 +825,11 @@ let mayLoad = 1, usesCustomInserter = 1, Predicates = [HasSingleFloat] in
                 instrAsm#"\t$t, $addr", 
                 [(set FPR:$t, (opNode addrOp:$addr))]>
   {
-   bits<12> addr;
+    bits<12> addr;
 
-   let r = oper;
-   let imm8{7-0} = addr{11-4};
-   let s{3-0} = addr{3-0};
+    let r = oper;
+    let imm8{7-0} = addr{11-4};
+    let s{3-0} = addr{3-0};
   }
 }
 
@@ -843,11 +843,11 @@ let mayStore = 1, usesCustomInserter = 1, Predicates = [HasSingleFloat] in
               instrAsm#"\t$t, $addr", 
               [(opNode FPR:$t, addrOp:$addr)]>
   {
-   bits<12> addr;
+    bits<12> addr;
 
-   let r = oper;
-   let imm8{7-0} = addr{11-4};
-   let s{3-0} = addr{3-0};
+    let r = oper;
+    let imm8{7-0} = addr{11-4};
+    let s{3-0} = addr{3-0};
   }
 
 }
@@ -925,12 +925,6 @@ def MOV_S: RRR_Inst<0x00, 0x0A, 0x0f, (outs FPR:$r), (ins FPR:$s),
 
 let isBranch = 1, isTerminator = 1, Predicates = [HasBoolean] in 
 {
-  /*def BTs: CALL_Inst<0x06, (outs), (ins BR:$b, brtarget:$offset), "bt\t$b, $offset", 
-          [(Xtensa_brcc_t BR:$b, bb:$offset)]>;
-
-  def BFs: CALL_Inst<0x06, (outs), (ins BR:$b,  brtarget:$offset), "bf\t$b, $offset", 
-          [(Xtensa_brcc_f BR:$b, bb:$offset)]>;*/
-
   def BTs: RRI8_Inst<0x06, (outs), 
               (ins BR:$b, brtarget:$target), 
               "bt\t$b, $target", 
