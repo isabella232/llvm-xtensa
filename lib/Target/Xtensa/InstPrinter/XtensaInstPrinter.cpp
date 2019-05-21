@@ -167,7 +167,7 @@ void XtensaInstPrinter::printImm7n_AsmOperand(const MCInst *MI, int OpNum,
                                               raw_ostream &O) {
   if (MI->getOperand(OpNum).isImm()) {
     int64_t Value = MI->getOperand(OpNum).getImm();
-    assert((Value >= -32 && Value <= 95) && "Invalid imm12 argument");
+    assert((Value >= -32 && Value <= 95) && "Invalid imm7n argument");
     O << Value;
   } else
     printOperand(MI, OpNum, O);
@@ -228,7 +228,7 @@ void XtensaInstPrinter::printShimm16_31_AsmOperand(const MCInst *MI, int OpNum,
                                                    raw_ostream &O) {
   if (MI->getOperand(OpNum).isImm()) {
     int64_t Value = MI->getOperand(OpNum).getImm();
-    assert((Value >= 16 && Value <= 31) && "Invalid shimm5 argument");
+    assert((Value >= 16 && Value <= 31) && "Invalid shimm16_31 argument");
     O << Value;
   } else
     printOperand(MI, OpNum, O);
@@ -238,7 +238,7 @@ void XtensaInstPrinter::printShimm1_16_AsmOperand(const MCInst *MI, int OpNum,
                                                   raw_ostream &O) {
   if (MI->getOperand(OpNum).isImm()) {
     int64_t Value = MI->getOperand(OpNum).getImm();
-    assert((Value >= 1 && Value <= 16) && "Invalid shimm5 argument");
+    assert((Value >= 1 && Value <= 16) && "Invalid ahimm1_16 argument");
     O << Value;
   } else
     printOperand(MI, OpNum, O);
@@ -248,7 +248,7 @@ void XtensaInstPrinter::printShimm17_31_AsmOperand(const MCInst *MI, int OpNum,
                                                    raw_ostream &O) {
   if (MI->getOperand(OpNum).isImm()) {
     int64_t Value = MI->getOperand(OpNum).getImm();
-    assert((Value >= 17 && Value <= 31) && "Invalid shimm5 argument");
+    assert((Value >= 17 && Value <= 31) && "Invalid shimm17_31 argument");
     O << Value;
   } else
     printOperand(MI, OpNum, O);
@@ -321,7 +321,7 @@ void XtensaInstPrinter::printB4const_AsmOperand(const MCInst *MI, int OpNum,
     case 256:
       break;
     default:
-      assert((0) && "Invalid entry_imm12 argument");
+      assert((0) && "Invalid B4const argument");
     }
     O << Value;
   } else
@@ -352,7 +352,7 @@ void XtensaInstPrinter::printB4constu_AsmOperand(const MCInst *MI, int OpNum,
     case 256:
       break;
     default:
-      assert((0) && "Invalid entry_imm12 argument");
+      assert((0) && "Invalid B4constu argument");
     }
     O << Value;
   } else

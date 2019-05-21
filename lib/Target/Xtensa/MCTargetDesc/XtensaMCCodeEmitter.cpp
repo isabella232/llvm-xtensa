@@ -61,7 +61,6 @@ private:
     const MCOperand &MO = MI.getOperand(OpNum);
     // TODO: do we need to sign extend explicitly?
     if (MO.isImm())
-      // return MO.getImm() << 1;
       return MO.getImm();
     const MCExpr *Expr = MO.getExpr();
     Fixups.push_back(MCFixup::create(
@@ -198,6 +197,7 @@ void XtensaMCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
     }
   } else {
     // TODO Big-endian insertion of Size bytes.
+    llvm_unreachable("Big-endian mode is not supported!");
   }
 }
 

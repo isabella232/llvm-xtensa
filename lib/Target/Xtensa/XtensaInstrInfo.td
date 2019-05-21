@@ -584,7 +584,7 @@ let isCall = 1,
     {
       let m = 0x3;
       let n = 0x0;
-	  let r = 0;
+      let r = 0;
     }
 	
     def CALLX4: CALLX_Inst<0x00, 0x00, 0x00, (outs), (ins AR:$s), 
@@ -592,7 +592,7 @@ let isCall = 1,
     {
       let m = 0x3;
       let n = 0x1;
-	  let r = 0;
+      let r = 0;
     }
 
     def CALLX8: CALLX_Inst<0x00, 0x00, 0x00, (outs), (ins AR:$s), 
@@ -600,7 +600,7 @@ let isCall = 1,
     {
       let m = 0x3;
       let n = 0x2;
-	  let r = 0;
+      let r = 0;
     }
 
     def CALLX12: CALLX_Inst<0x00, 0x00, 0x00, (outs), (ins AR:$s), 
@@ -608,7 +608,7 @@ let isCall = 1,
     {
       let m = 0x3;
       let n = 0x3;
-	  let r = 0;
+      let r = 0;
     }
   }
 }

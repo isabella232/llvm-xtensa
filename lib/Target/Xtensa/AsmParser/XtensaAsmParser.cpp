@@ -155,7 +155,7 @@ public:
       if (!Value)
         return false;
     }
-	return isImm(0, 15); 
+    return isImm(0, 15); 
   }
 
   bool isoffset4m32() const { return isImm(0, 15); }

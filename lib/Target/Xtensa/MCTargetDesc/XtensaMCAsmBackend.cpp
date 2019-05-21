@@ -25,8 +25,11 @@ class XtensaMCAsmBackend : public MCAsmBackend {
   uint8_t OSABI;
   bool IsLittleEndian = true; // TODO: maybe big-endian machine support is also
                               // needed. Now default is little-endian machine
+  bool IsCodeDensity = true;
+
 public:
-  XtensaMCAsmBackend(uint8_t osABI) : OSABI(osABI) {}
+  XtensaMCAsmBackend(uint8_t osABI, bool hasFeatureDensity)
+      : OSABI(osABI), IsCodeDensity(hasFeatureDensity) {}
 
   // Override MCAsmBackend
   unsigned getNumFixupKinds() const override {
@@ -174,8 +177,27 @@ void XtensaMCAsmBackend::relaxInstruction(const MCInst &Inst,
 
 bool XtensaMCAsmBackend::writeNopData(uint64_t Count,
                                       MCObjectWriter *OW) const {
-  uint64_t NumNops = Count / 3;
-  for (uint64_t i = 0; i != NumNops; ++i) {
+  uint64_t NumNops16b = 0;
+
+  if (IsCodeDensity && (Count > 1)) {
+    NumNops16b = (Count >> 1) - (Count & 0x1);
+  }
+
+  // Fill data with 16b NOP instructions first if possible
+  for (uint64_t i = 0; i != NumNops16b; ++i) {
+    if (IsLittleEndian) {
+      OW->write8(0x3d);
+      OW->write8(0xf0);
+    } else {
+      OW->write8(0xf0);
+      OW->write8(0x3d);
+    }
+    Count -= 2;
+  }
+
+  uint64_t NumNops24b = Count / 3;
+
+  for (uint64_t i = 0; i != NumNops24b; ++i) {
     if (IsLittleEndian) {
       OW->write8(0xf0);
       OW->write8(0x20);
@@ -185,9 +207,11 @@ bool XtensaMCAsmBackend::writeNopData(uint64_t Count,
       OW->write8(0x20);
       OW->write8(0xf0);
     }
+    Count -= 3;
   }
-  // TODO maybe function should return error if (Count%3 > 0)
-  switch (Count % 3) {
+
+  // TODO maybe function should return error if (Count > 0)
+  switch (Count) {
   default:
     break;
   case 1:
@@ -207,5 +231,6 @@ MCAsmBackend *llvm::createXtensaMCAsmBackend(const Target &T,
                                              const MCTargetOptions &Options) {
   uint8_t OSABI =
       MCELFObjectTargetWriter::getOSABI(STI.getTargetTriple().getOS());
-  return new XtensaMCAsmBackend(OSABI);
+  bool hasFeatureDensity = STI.getFeatureBits()[Xtensa::FeatureDensity];
+  return new XtensaMCAsmBackend(OSABI, hasFeatureDensity);
 }
