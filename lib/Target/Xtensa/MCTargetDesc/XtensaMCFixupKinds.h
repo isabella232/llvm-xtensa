@@ -15,6 +15,15 @@
 namespace llvm {
 namespace Xtensa {
 enum FixupKind {
+  fixup_xtensa_branch_6 = FirstTargetFixupKind,
+  fixup_xtensa_branch_8,
+  fixup_xtensa_branch_12,
+  fixup_xtensa_jump_18,
+  fixup_xtensa_call_18,
+  fixup_xtensa_l32r_16,
+  fixup_xtensa_tprel_l32r_16,
+  fixup_xtensa_plt_l32r_16,
+  fixup_xtensa_invalid,
   LastTargetFixupKind,
   NumTargetFixupKinds = LastTargetFixupKind - FirstTargetFixupKind
 };

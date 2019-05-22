@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "XtensaISelLowering.h"
+#include "MCTargetDesc/XtensaBaseInfo.h"
 #include "XtensaCallingConv.h"
 #include "XtensaConstantPoolValue.h"
 #include "XtensaMachineFunctionInfo.h"
@@ -91,7 +92,6 @@ XtensaTargetLowering::XtensaTargetLowering(const TargetMachine &tm,
   else
     setOperationAction(ISD::BR_CC, MVT::f32, Expand);
 
-
   setOperationAction(ISD::SELECT, MVT::i32, Expand);
   setOperationAction(ISD::SELECT, MVT::i64, Expand);
   setOperationAction(ISD::SELECT, MVT::f32, Expand);
@@ -103,7 +103,6 @@ XtensaTargetLowering::XtensaTargetLowering(const TargetMachine &tm,
   else
     setOperationAction(ISD::SELECT_CC, MVT::f32, Expand);
 
-
   setOperationAction(ISD::SETCC, MVT::i32,
                      Custom /* Legal */); // folds into brcond
   setOperationAction(ISD::SETCC, MVT::i64, Expand);
@@ -111,7 +110,6 @@ XtensaTargetLowering::XtensaTargetLowering(const TargetMachine &tm,
     setOperationAction(ISD::SETCC, MVT::f32, Custom);
   else
     setOperationAction(ISD::SETCC, MVT::f32, Expand);
-
 
   setOperationAction(ISD::Constant, MVT::i32, Custom);
   setOperationAction(ISD::Constant, MVT::i64, Expand /*Custom */);
@@ -159,7 +157,7 @@ XtensaTargetLowering::XtensaTargetLowering(const TargetMachine &tm,
     setOperationAction(ISD::SDIV, MVT::i32, Expand);
     setOperationAction(ISD::UDIV, MVT::i32, Expand);
     setOperationAction(ISD::SREM, MVT::i32, Expand);
-    setOperationAction(ISD::UREM, MVT::i32, Expand);  
+    setOperationAction(ISD::UREM, MVT::i32, Expand);
   }
   setOperationAction(ISD::SDIV, MVT::i64, Expand);
   setOperationAction(ISD::UDIV, MVT::i64, Expand);
@@ -318,6 +316,26 @@ XtensaTargetLowering::XtensaTargetLowering(const TargetMachine &tm,
   // to have the best chance and doing something good with fences custom lower
   // them
   setOperationAction(ISD::ATOMIC_FENCE, MVT::Other, Custom);
+
+  if (!Subtarget.hasS32C1I()) {
+    for (unsigned I = MVT::FIRST_INTEGER_VALUETYPE;
+         I <= MVT::LAST_INTEGER_VALUETYPE; ++I) {
+      MVT VT = MVT::SimpleValueType(I);
+      if (isTypeLegal(VT)) {
+        setOperationAction(ISD::ATOMIC_CMP_SWAP, VT, Expand);
+        setOperationAction(ISD::ATOMIC_LOAD_ADD, VT, Expand);
+        setOperationAction(ISD::ATOMIC_LOAD_SUB, VT, Expand);
+        setOperationAction(ISD::ATOMIC_LOAD_AND, VT, Expand);
+        setOperationAction(ISD::ATOMIC_LOAD_OR, VT, Expand);
+        setOperationAction(ISD::ATOMIC_LOAD_XOR, VT, Expand);
+        setOperationAction(ISD::ATOMIC_LOAD_NAND, VT, Expand);
+        setOperationAction(ISD::ATOMIC_LOAD_MIN, VT, Expand);
+        setOperationAction(ISD::ATOMIC_LOAD_MAX, VT, Expand);
+        setOperationAction(ISD::ATOMIC_LOAD_UMIN, VT, Expand);
+        setOperationAction(ISD::ATOMIC_LOAD_UMAX, VT, Expand);
+      }
+    }
+  }
 
   if (Subtarget.hasSingleFloat()) {
     setCondCodeAction(ISD::SETOGT, MVT::f32, Expand);
@@ -841,7 +859,8 @@ SDValue XtensaTargetLowering::getTargetNode(SDValue Op, SelectionDAG &DAG,
   return SDValue();
 }
 
-SDValue XtensaTargetLowering::getAddrPIC(SDValue Op, SelectionDAG &DAG) const {
+SDValue XtensaTargetLowering::getAddrPCRel(SDValue Op,
+                                           SelectionDAG &DAG) const {
   SDLoc DL(Op);
   EVT Ty = Op.getValueType();
   return DAG.getNode(XtensaISD::PCREL_WRAPPER, DL, Ty, Op);
@@ -971,15 +990,17 @@ XtensaTargetLowering::LowerCall(CallLoweringInfo &CLI,
   // const char *name = 0;
   std::string name;
 
+  unsigned char TF = 0;
+
   // Accept direct calls by converting symbolic call addresses to the
   // associated Target* opcodes.
   if (ExternalSymbolSDNode *E = dyn_cast<ExternalSymbolSDNode>(Callee)) {
     name = E->getSymbol();
-    if (DAG.getTarget().getRelocationModel() == Reloc::PIC_)
-      Callee =
-          getAddrPIC(DAG.getTargetExternalSymbol(E->getSymbol(), PtrVT), DAG);
-    else
-      Callee = DAG.getTargetExternalSymbol(E->getSymbol(), PtrVT);
+    TF = E->getTargetFlags();
+    if (isPositionIndependent()) {
+      report_fatal_error("PIC relocations is not supported");
+    } else
+      Callee = DAG.getTargetExternalSymbol(E->getSymbol(), PtrVT, TF);
   } else if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee)) {
     // TODO replace GlobalAddress to some special operand instead of
     // ExternalSymbol
@@ -997,8 +1018,8 @@ XtensaTargetLowering::LowerCall(CallLoweringInfo &CLI,
         *DAG.getContext(), name.c_str(), 0 /* XtensaCLabelIndex */, false);
 
     // Get the address of the callee into a register
-    SDValue CPAddr = DAG.getTargetConstantPool(CPV, PtrVT, 4);
-    SDValue CPWrap = getAddrPIC(CPAddr, DAG);
+    SDValue CPAddr = DAG.getTargetConstantPool(CPV, PtrVT, 4, 0, TF);
+    SDValue CPWrap = getAddrPCRel(CPAddr, DAG);
     Callee = CPWrap;
   }
 
@@ -1366,7 +1387,7 @@ SDValue XtensaTargetLowering::lowerGlobalAddress(SDValue Op,
 
     // Get the address of the callee into a register
     SDValue CPAddr = DAG.getTargetConstantPool(CPV, PtrVt, 4);
-    SDValue CPWrap = getAddrPIC(CPAddr, DAG);
+    SDValue CPWrap = getAddrPCRel(CPAddr, DAG);
 
     return CPWrap;
   }
@@ -1381,40 +1402,61 @@ SDValue XtensaTargetLowering::lowerGlobalTLSAddress(GlobalAddressSDNode *GA,
 
   TLSModel::Model model = getTargetMachine().getTLSModel(GV);
 
-  if (model == TLSModel::InitialExec) {
+  if ((model == TLSModel::LocalExec) || (model == TLSModel::InitialExec)) {
     // Initial Exec TLS Model
-    auto PtrVt = getPointerTy(DAG.getDataLayout());
+    if (!Subtarget.hasTHREADPTR()) {
+      auto PtrVt = getPointerTy(DAG.getDataLayout());
 
-    bool Priv = GV->isPrivateLinkage(GV->getLinkage());
-    // Create a constant pool entry for the callee address
-    XtensaConstantPoolValue *CPV = XtensaConstantPoolSymbol::Create(
-        *DAG.getContext(), GV->getName().str().c_str() /* Sym */,
-        0 /* XtensaCLabelIndex */, Priv, XtensaCP::TPOFF);
+      bool Priv = GV->isPrivateLinkage(GV->getLinkage());
+      // Create a constant pool entry for the callee address
+      XtensaConstantPoolValue *CPV = XtensaConstantPoolSymbol::Create(
+          *DAG.getContext(), GV->getName().str().c_str() /* Sym */,
+          0 /* XtensaCLabelIndex */, Priv, XtensaCP::TLS_EMUL);
 
-    // Get the address of the callee into a register
-    SDValue CPAddr = DAG.getTargetConstantPool(CPV, PtrVt, 4);
-    SDValue CPWrap = getAddrPIC(CPAddr, DAG);
+      // Get the address of the callee into a register
+      SDValue CPAddr = DAG.getTargetConstantPool(CPV, PtrVt, 4);
+      SDValue CPWrap = getAddrPCRel(CPAddr, DAG);
 
-    SDValue ThreadPointer = DAG.getNode(XtensaISD::RUR, DL, PtrVT);
-    return DAG.getNode(ISD::ADD, DL, PtrVT, ThreadPointer, CPWrap);
-  } else if (model == TLSModel::LocalExec) {
-    // Local Exec TLS Model
-    auto PtrVt = getPointerTy(DAG.getDataLayout());
+      unsigned PtrSize = PtrVT.getSizeInBits();
+      IntegerType *PtrTy = Type::getIntNTy(*DAG.getContext(), PtrSize);
 
-    bool Priv = GV->isPrivateLinkage(GV->getLinkage());
-    // Create a constant pool entry for the callee address
-    XtensaConstantPoolValue *CPV = XtensaConstantPoolSymbol::Create(
-        *DAG.getContext(), GV->getName().str().c_str() /* Sym */,
-        0 /* XtensaCLabelIndex */, Priv, XtensaCP::TPOFF);
+      SDValue TlsGetAddr = DAG.getTargetExternalSymbol(
+          "__emutls_get_address@PLT", PtrVT, XtensaII::MO_PLT);
 
-    // Get the address of the callee into a register
-    SDValue CPAddr = DAG.getTargetConstantPool(CPV, PtrVt, 4);
-    SDValue CPWrap = getAddrPIC(CPAddr, DAG);
+      ArgListTy Args;
+      ArgListEntry Entry;
+      Entry.Node = CPWrap;
+      Entry.Ty = PtrTy;
+      Args.push_back(Entry);
 
-    SDValue ThreadPointer = DAG.getNode(XtensaISD::RUR, DL, PtrVT);
-    return DAG.getNode(ISD::ADD, DL, PtrVT, ThreadPointer, CPWrap);
+      TargetLowering::CallLoweringInfo CLI(DAG);
+      CLI.setDebugLoc(DL)
+          .setChain(DAG.getEntryNode())
+          .setLibCallee(CallingConv::C, PtrTy, TlsGetAddr, std::move(Args));
+      std::pair<SDValue, SDValue> CallResult = LowerCallTo(CLI);
+
+      SDValue Ret = CallResult.first;
+
+      return Ret;
+    } else {
+      auto PtrVt = getPointerTy(DAG.getDataLayout());
+
+      bool Priv = GV->isPrivateLinkage(GV->getLinkage());
+      // Create a constant pool entry for the callee address
+      XtensaConstantPoolValue *CPV = XtensaConstantPoolSymbol::Create(
+          *DAG.getContext(), GV->getName().str().c_str() /* Sym */,
+          0 /* XtensaCLabelIndex */, Priv, XtensaCP::TPOFF);
+
+      // Get the address of the callee into a register
+      SDValue CPAddr =
+          DAG.getTargetConstantPool(CPV, PtrVt, 4, 0, XtensaII::MO_TPREL);
+      SDValue CPWrap = getAddrPCRel(CPAddr, DAG);
+
+      SDValue ThreadPointer = DAG.getNode(XtensaISD::RUR, DL, PtrVT);
+      return DAG.getNode(ISD::ADD, DL, PtrVT, ThreadPointer, CPWrap);
+    }
   } else
-    llvm_unreachable("only local-exec TLS mode supported");
+    llvm_unreachable("only local-exec and initial-exec TLS mode supported");
 
   return SDValue();
 }
@@ -1428,7 +1470,7 @@ SDValue XtensaTargetLowering::lowerBlockAddress(BlockAddressSDNode *Node,
       XtensaConstantPoolConstant::Create(BA, 0, XtensaCP::CPBlockAddress, 0);
   SDValue CPAddr = DAG.getTargetConstantPool(CPV, PtrVT, 4);
 
-  SDValue CPWrap = getAddrPIC(CPAddr, DAG);
+  SDValue CPWrap = getAddrPCRel(CPAddr, DAG);
   return CPWrap;
 }
 
@@ -1472,7 +1514,7 @@ SDValue XtensaTargetLowering::lowerJumpTable(JumpTableSDNode *JT,
 
   // Get the address of the callee into a register
   SDValue CPAddr = DAG.getTargetConstantPool(CPV, PtrVt, 4);
-  SDValue CPWrap = getAddrPIC(CPAddr, DAG);
+  SDValue CPWrap = getAddrPCRel(CPAddr, DAG);
 
   return CPWrap;
 }
@@ -1489,7 +1531,7 @@ SDValue XtensaTargetLowering::lowerConstantPool(ConstantPoolSDNode *CP,
     Result = DAG.getTargetConstantPool(CP->getConstVal(), PtrVT,
                                        CP->getAlignment(), CP->getOffset());
 
-  return getAddrPIC(Result, DAG);
+  return getAddrPCRel(Result, DAG);
 }
 
 SDValue XtensaTargetLowering::lowerVASTART(SDValue Op,
@@ -1504,7 +1546,8 @@ SDValue XtensaTargetLowering::lowerVASTART(SDValue Op,
 
   // typedef struct __va_list_tag {
   //   int32_t *__va_stk; /* Initialized to point  to the position of the
-  //                       * first argument in memory offset to account for the
+  //                       * first argument in memory offset to account for
+  //                       the
   //                       * arguments passed in registers and to account for
   //                       * the size of the argument registers not being
   //                       16-byte
@@ -1513,7 +1556,8 @@ SDValue XtensaTargetLowering::lowerVASTART(SDValue Op,
   //                       * first stack argument to have the maximal
   //                       * alignment of 16 bytes, so we offset the __va_stk
   //                       address by
-  //                       * 32 bytes so that __va_stk[32] references the first
+  //                       * 32 bytes so that __va_stk[32] references the
+  //                       first
   //                       * argument on the stack.
   //                       */
   //   int32_t  *__va_reg; /* Points to a stack-allocated region holding the
@@ -2621,13 +2665,11 @@ MachineBasicBlock *XtensaTargetLowering::EmitInstrWithCustomInserter(
     }
 
     BuildMI(*MBB, MI, DL, TII.get(Xtensa::L8UI), r_new).add(Op1).add(Op2);
-    if (Subtarget.hasSEXT())
-    {
-       BuildMI(*MBB, MI, DL, TII.get(Xtensa::SEXT), R.getReg())
-        .addReg(r_new)
-        .addImm(7);
-    } else
-    {
+    if (Subtarget.hasSEXT()) {
+      BuildMI(*MBB, MI, DL, TII.get(Xtensa::SEXT), R.getReg())
+          .addReg(r_new)
+          .addImm(7);
+    } else {
       unsigned r_new1 = MRI.createVirtualRegister(RC);
       BuildMI(*MBB, MI, DL, TII.get(Xtensa::SLLI), r_new1)
           .addReg(r_new)
@@ -2745,7 +2787,6 @@ MachineBasicBlock *XtensaTargetLowering::EmitInstrWithCustomInserter(
     }
     return MBB;
   }
-
   default:
     llvm_unreachable("Unexpected instr type to insert");
   }

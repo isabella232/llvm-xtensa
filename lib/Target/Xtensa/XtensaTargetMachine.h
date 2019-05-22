@@ -38,7 +38,6 @@ public:
   const XtensaSubtarget *getSubtargetImpl() const { return &Subtarget; }
   const XtensaSubtarget *getSubtargetImpl(const Function &F) const override;
   // Override LLVMTargetMachine
-  void adjustPassManager(PassManagerBuilder &PMB) override;
   TargetPassConfig *createPassConfig(PassManagerBase &PM) override;
   TargetLoweringObjectFile *getObjFileLowering() const override {
     return TLOF.get();

@@ -42,6 +42,9 @@ void XtensaTargetObjectFile::Initialize(MCContext &Ctx,
   TargetLoweringObjectFileELF::Initialize(Ctx, TM);
   InitializeELF(TM.Options.UseInitArray);
 
+  LiteralSection = getContext().getELFSection(
+      ".literal", ELF::SHT_PROGBITS, ELF::SHF_EXECINSTR | ELF::SHF_ALLOC);
+
   SmallDataSection = getContext().getELFSection(
       ".sdata", ELF::SHT_PROGBITS, ELF::SHF_WRITE | ELF::SHF_ALLOC);
 
@@ -135,13 +138,9 @@ bool XtensaTargetObjectFile::IsConstantInSmallSection(
           LocalSData && IsInSmallSection(DL.getTypeAllocSize(CN->getType())));
 }
 
-/// Return true if this constant should be placed into small data section.
+/// Return section for constant
 MCSection *XtensaTargetObjectFile::getSectionForConstant(
     const DataLayout &DL, SectionKind Kind, const Constant *C,
     unsigned &Align) const {
-  if (IsConstantInSmallSection(DL, C, *TM))
-    return SmallDataSection;
-
-  // Otherwise, we work the same as ELF.
-  return TargetLoweringObjectFileELF::getSectionForConstant(DL, Kind, C, Align);
+  return LiteralSection;
 }

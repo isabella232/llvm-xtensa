@@ -128,24 +128,16 @@ bool XtensaPassConfig::addInstSelector() {
 
 void XtensaPassConfig::addIRPasses() {
   addPass(createAtomicExpandPass());
-  //	addPass(createXtensaZOLPass);
+  // TODO ZOL pass should be implemented
+  // addPass(createXtensaZOLPass);
 }
 
 void XtensaPassConfig::addPreEmitPass() {
-  addPass(createXtensaBranchSelectionPass());
   addPass(createXtensaSizeReductionPass());
+  addPass(&BranchRelaxationPassID);
 }
 
 TargetPassConfig *XtensaTargetMachine::createPassConfig(PassManagerBase &PM) {
   return new XtensaPassConfig(*this, PM);
 }
 
-void XtensaTargetMachine::adjustPassManager(PassManagerBuilder &PMB) {
-  /*
-  PMB.addExtension(
-      PassManagerBuilder::EP_LoopOptimizerEnd,
-      [&](const PassManagerBuilder &, legacy::PassManagerBase &PM) {
-        PM.add(createXtensaZOLPass());
-      });
-  */
-}

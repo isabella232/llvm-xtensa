@@ -84,11 +84,12 @@ class XtensaDAGToDAGISel : public SelectionDAGISel {
       return true;
     }
 
-    if (TM.getRelocationModel() != Reloc::PIC_) {
-      if ((Addr.getOpcode() == ISD::TargetExternalSymbol ||
+    if (TM.isPositionIndependent())
+      report_fatal_error("PIC relocations is not supported");
+
+    if ((Addr.getOpcode() == ISD::TargetExternalSymbol ||
            Addr.getOpcode() == ISD::TargetGlobalAddress))
         return false;
-    }
 
     // Addresses of the form FI+const or FI|const
     bool Valid = false;
@@ -156,12 +157,13 @@ class XtensaDAGToDAGISel : public SelectionDAGISel {
     //      return true;
     //    }
 
-    if (TM.getRelocationModel() != Reloc::PIC_) {
-      if ((Addr.getOpcode() == ISD::TargetExternalSymbol ||
-           Addr.getOpcode() == ISD::TargetGlobalAddress))
-        return false;
-    }
+    if (TM.isPositionIndependent())
+      report_fatal_error("PIC relocations is not supported");
 
+    if ((Addr.getOpcode() == ISD::TargetExternalSymbol ||
+       Addr.getOpcode() == ISD::TargetGlobalAddress))
+      return false;
+ 
     // Addresses of the form FI+const or FI|const
     if (CurDAG->isBaseWithConstantOffset(Addr)) {
       ConstantSDNode *CN = dyn_cast<ConstantSDNode>(Addr.getOperand(1));

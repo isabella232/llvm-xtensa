@@ -147,7 +147,16 @@ public:
            ((dyn_cast<MCConstantExpr>(getImm())->getValue() & 0xFF) == 0);
   }
 
-  bool isimmn() const { return isImm(0, 15); }
+  bool isimmn() const { 
+    if (Kind != Immediate)
+      return false;
+    if (auto *CE = dyn_cast<MCConstantExpr>(getImm())) {
+      int64_t Value = CE->getValue();
+      if (!Value)
+        return false;
+    }
+    return isImm(0, 15); 
+  }
 
   bool isoffset4m32() const { return isImm(0, 15); }
 
@@ -160,6 +169,12 @@ public:
   bool isshimm4() const { return isImm(0, 15); }
 
   bool isshimm5() const { return isImm(0, 31); }
+
+  bool isshimm16_31() const { return isImm(16, 31); }
+
+  bool isshimm1_16() const { return isImm(1, 16); }
+  
+  bool isshimm17_31() const { return isImm(17, 31); }
 
   bool isb4const() const {
     if (Kind != Immediate)
@@ -221,7 +236,7 @@ public:
     return false;
   }
 
-  bool isseimm4() const { return isImm(7, 22); }
+  bool isseimm7_22() const { return isImm(7, 22); }
 
   /// getStartLoc - Gets location of the first token of this operand
   SMLoc getStartLoc() const override { return StartLoc; }

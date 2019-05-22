@@ -84,7 +84,6 @@ extern "C" void LLVMInitializeXtensaTargetMC() {
 
   // Register the MCInstrInfo.
   TargetRegistry::RegisterMCInstrInfo(TheXtensaTarget, createXtensaMCInstrInfo);
-  TargetRegistry::RegisterMCInstrInfo(TheXtensaTarget, createXtensaMCInstrInfo);
 
   // Register the MCRegisterInfo.
   TargetRegistry::RegisterMCRegInfo(TheXtensaTarget,

@@ -42,6 +42,20 @@ StringRef XtensaConstantPoolValue::getModifierText() const {
     return "";
   case XtensaCP::TPOFF:
     return "@TPOFF";
+  case XtensaCP::TLS_EMUL:
+    return "";
+  }
+  llvm_unreachable("Unknown modifier!");
+}
+
+StringRef XtensaConstantPoolValue::getModifierPrefixText() const {
+  switch (Modifier) {
+  case XtensaCP::no_modifier:
+    return "";
+  case XtensaCP::TPOFF:
+    return "";
+  case XtensaCP::TLS_EMUL:
+    return "__emutls_v$";
   }
   llvm_unreachable("Unknown modifier!");
 }

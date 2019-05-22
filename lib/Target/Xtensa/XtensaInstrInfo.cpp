@@ -107,20 +107,15 @@ void XtensaInstrInfo::adjustStackPtr(unsigned SP, int64_t Amount,
   }
 }
 
-unsigned XtensaInstrInfo::GetInstSizeInBytes(MachineInstr *MI) const {
-  switch (MI->getOpcode()) {
+unsigned XtensaInstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
+  switch (MI.getOpcode()) {
   case TargetOpcode::INLINEASM: { // Inline Asm: Variable size.
-    const MachineFunction *MF = MI->getParent()->getParent();
-    const char *AsmStr = MI->getOperand(0).getSymbolName();
+    const MachineFunction *MF = MI.getParent()->getParent();
+    const char *AsmStr = MI.getOperand(0).getSymbolName();
     return getInlineAsmLength(AsmStr, *MF->getTarget().getMCAsmInfo());
   }
-    // TODO
-    //  case Xtensa::CONSTPOOL_ENTRY:
-    // If this machine instr is a constant pool entry, its size is recorded as
-    // operand #2.
-    //    return MI->getOperand(2).getImm();
   default:
-    return MI->getDesc().getSize();
+    return MI.getDesc().getSize();
   }
 }
 
@@ -209,16 +204,12 @@ bool XtensaInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
 
 unsigned XtensaInstrInfo::removeBranch(MachineBasicBlock &MBB,
                                        int *BytesRemoved) const {
-  assert(!BytesRemoved && "code size not handled");
-
   // Most of the code and comments here are boilerplate.
   MachineBasicBlock::iterator I = MBB.end();
   unsigned Count = 0;
 
   while (I != MBB.begin()) {
     --I;
-    if (I->isDebugValue())
-      continue;
     SmallVector<MachineOperand, 4> Cond;
     Cond.push_back(MachineOperand::CreateImm(0));
     const MachineOperand *Target;
@@ -227,36 +218,39 @@ unsigned XtensaInstrInfo::removeBranch(MachineBasicBlock &MBB,
     if (!Target->isMBB())
       break;
     // Remove the branch.
+    if (BytesRemoved) *BytesRemoved += getInstSizeInBytes(*I);
     I->eraseFromParent();
     I = MBB.end();
     ++Count;
   }
-
   return Count;
 }
 
 unsigned XtensaInstrInfo::insertBranch(
     MachineBasicBlock &MBB, MachineBasicBlock *TBB, MachineBasicBlock *FBB,
     ArrayRef<MachineOperand> Cond, const DebugLoc &DL, int *BytesAdded) const {
-  assert(!BytesAdded && "code size not handled");
+  unsigned Count = 0; 
   if (FBB) {
     // Need to build two branches then
     // one to branch to TBB on Cond
     // and a second one immediately after to unconditionally jump to FBB
-    unsigned count = InsertBranchAtInst(MBB, MBB.end(), TBB, Cond, DL);
-    BuildMI(&MBB, DL, get(Xtensa::J)).addMBB(FBB);
-    count++;
-    return count;
+    Count = InsertBranchAtInst(MBB, MBB.end(), TBB, Cond, DL, BytesAdded);
+    auto &MI = *BuildMI(&MBB, DL, get(Xtensa::J)).addMBB(FBB);
+    Count++;
+    if (BytesAdded) *BytesAdded += getInstSizeInBytes(MI);
+    return Count;
   }
   // This function inserts the branch at the end of the MBB
-  return InsertBranchAtInst(MBB, MBB.end(), TBB, Cond, DL);
+  Count += InsertBranchAtInst(MBB, MBB.end(), TBB, Cond, DL, BytesAdded);
+  return Count;
 }
 
 unsigned XtensaInstrInfo::InsertConstBranchAtInst(MachineBasicBlock &MBB,
                                                   MachineInstr *I,
                                                   int64_t offset,
                                                   ArrayRef<MachineOperand> Cond,
-                                                  DebugLoc DL) const {
+                                                  DebugLoc DL,
+                                                  int *BytesAdded) const {
   // Shouldn't be a fall through.
   assert(&MBB && "InsertBranch must not be told to insert a fallthrough");
   assert(Cond.size() <= 4 &&
@@ -264,35 +258,38 @@ unsigned XtensaInstrInfo::InsertConstBranchAtInst(MachineBasicBlock &MBB,
 
   if (Cond.empty() || (Cond[0].getImm() == Xtensa::J)) {
     // Unconditional branch
-    BuildMI(MBB, I, DL, get(Xtensa::J)).addImm(offset);
+    MachineInstr *MI = BuildMI(MBB, I, DL, get(Xtensa::J)).addImm(offset);
+    if (BytesAdded && MI) *BytesAdded += getInstSizeInBytes(*MI);
     return 1;
   }
 
   unsigned Count = 0;
   unsigned BR_C = Cond[0].getImm();
   unsigned BRANCH_TYPE = BranchType(BR_C);
+  MachineInstr *MI = nullptr;
   switch (BRANCH_TYPE) {
   case Xtensa::CBRANCH_RR:
-    BuildMI(MBB, I, DL, get(BR_C))
+    MI = BuildMI(MBB, I, DL, get(BR_C))
         .addImm(offset)
         .addReg(Cond[1].getReg())
         .addReg(Cond[2].getReg());
     break;
   case Xtensa::CBRANCH_RI:
-    BuildMI(MBB, I, DL, get(BR_C))
+    MI = BuildMI(MBB, I, DL, get(BR_C))
         .addImm(offset)
         .addReg(Cond[1].getReg())
         .addImm(Cond[2].getImm());
     break;
   case Xtensa::CBRANCH_RZ:
-    BuildMI(MBB, I, DL, get(BR_C)).addImm(offset).addReg(Cond[1].getReg());
+    MI = BuildMI(MBB, I, DL, get(BR_C)).addImm(offset).addReg(Cond[1].getReg());
     break;
   case Xtensa::CBRANCH_B:
-    BuildMI(MBB, I, DL, get(BR_C)).addImm(offset).addReg(Cond[1].getReg());
+    MI = BuildMI(MBB, I, DL, get(BR_C)).addImm(offset).addReg(Cond[1].getReg());
     break;
   default:
     llvm_unreachable("Invalid branch type!");
   }
+  if (BytesAdded && MI) *BytesAdded += getInstSizeInBytes(*MI);
   ++Count;
   return Count;
 }
@@ -301,7 +298,8 @@ unsigned XtensaInstrInfo::InsertBranchAtInst(MachineBasicBlock &MBB,
                                              MachineBasicBlock::iterator I,
                                              MachineBasicBlock *TBB,
                                              ArrayRef<MachineOperand> Cond,
-                                             const DebugLoc &DL) const {
+                                             const DebugLoc &DL,
+                                             int *BytesAdded) const {
   // Shouldn't be a fall through.
   assert(TBB && "InsertBranch must not be told to insert a fallthrough");
   assert(Cond.size() <= 4 &&
@@ -309,35 +307,38 @@ unsigned XtensaInstrInfo::InsertBranchAtInst(MachineBasicBlock &MBB,
 
   if (Cond.empty() || (Cond[0].getImm() == Xtensa::J)) {
     // Unconditional branch
-    BuildMI(MBB, I, DL, get(Xtensa::J)).addMBB(TBB);
+    MachineInstr *MI = BuildMI(MBB, I, DL, get(Xtensa::J)).addMBB(TBB);
+    if (BytesAdded && MI) *BytesAdded += getInstSizeInBytes(*MI);
     return 1;
   }
 
   unsigned Count = 0;
   unsigned BR_C = Cond[0].getImm();
   unsigned BRANCH_TYPE = BranchType(BR_C);
+  MachineInstr *MI = nullptr;
   switch (BRANCH_TYPE) {
   case Xtensa::CBRANCH_RR:
-    BuildMI(MBB, I, DL, get(BR_C))
+    MI = BuildMI(MBB, I, DL, get(BR_C))
         .addReg(Cond[1].getReg())
         .addReg(Cond[2].getReg())
         .addMBB(TBB);
     break;
   case Xtensa::CBRANCH_RI:
-    BuildMI(MBB, I, DL, get(BR_C))
+    MI = BuildMI(MBB, I, DL, get(BR_C))
         .addReg(Cond[1].getReg())
         .addImm(Cond[2].getImm())
         .addMBB(TBB);
     break;
   case Xtensa::CBRANCH_RZ:
-    BuildMI(MBB, I, DL, get(BR_C)).addReg(Cond[1].getReg()).addMBB(TBB);
+    MI = BuildMI(MBB, I, DL, get(BR_C)).addReg(Cond[1].getReg()).addMBB(TBB);
     break;
   case Xtensa::CBRANCH_B:
-    BuildMI(MBB, I, DL, get(BR_C)).addReg(Cond[1].getReg()).addMBB(TBB);
+    MI = BuildMI(MBB, I, DL, get(BR_C)).addReg(Cond[1].getReg()).addMBB(TBB);
     break;
   default:
     llvm_unreachable("Invalid branch type!");
   }
+  if (BytesAdded && MI) *BytesAdded += getInstSizeInBytes(*MI);
   ++Count;
   return Count;
 }
@@ -472,6 +473,93 @@ bool XtensaInstrInfo::reverseBranchCondition(
   }
 }
 
+MachineBasicBlock *
+XtensaInstrInfo::getBranchDestBlock(const MachineInstr &MI) const {
+  unsigned OpCode = MI.getOpcode();
+  switch (OpCode) {
+  case Xtensa::BR_JT:
+  case Xtensa::JX:
+	return nullptr;
+  case Xtensa::J:
+    return MI.getOperand(0).getMBB();
+  case Xtensa::BEQ:
+  case Xtensa::BNE:
+  case Xtensa::BLT:
+  case Xtensa::BLTU:
+  case Xtensa::BGE:
+  case Xtensa::BGEU:
+  case Xtensa::BGT:
+  case Xtensa::BGTU:
+  case Xtensa::BLE:
+  case Xtensa::BLEU:
+    return MI.getOperand(2).getMBB();
+ 
+  case Xtensa::BEQI:
+  case Xtensa::BNEI:
+  case Xtensa::BLTI:
+  case Xtensa::BLTUI:
+  case Xtensa::BGEI:
+  case Xtensa::BGEUI:
+    return MI.getOperand(2).getMBB();
+
+  case Xtensa::BEQZ:
+  case Xtensa::BNEZ:
+  case Xtensa::BLTZ:
+  case Xtensa::BGEZ:
+    return MI.getOperand(1).getMBB();
+
+  case Xtensa::BTs:
+  case Xtensa::BFs:
+    return MI.getOperand(1).getMBB();
+
+  default:
+    llvm_unreachable("Unknown branch opcode");
+  }
+}
+
+bool XtensaInstrInfo::isBranchOffsetInRange(unsigned BranchOp,
+                                         int64_t BrOffset) const {
+  switch (BranchOp) {
+  case Xtensa::J:
+    BrOffset -= 4;
+    return isIntN(18, BrOffset);
+  case Xtensa::JX:
+    return true;
+  case Xtensa::BR_JT:
+    return true;
+  case Xtensa::BEQ:
+  case Xtensa::BNE:
+  case Xtensa::BLT:
+  case Xtensa::BLTU:
+  case Xtensa::BGE:
+  case Xtensa::BGEU:
+  case Xtensa::BGT:
+  case Xtensa::BGTU:
+  case Xtensa::BLE:
+  case Xtensa::BLEU:
+  case Xtensa::BEQI:
+  case Xtensa::BNEI:
+  case Xtensa::BLTI:
+  case Xtensa::BLTUI:
+  case Xtensa::BGEI:
+  case Xtensa::BGEUI:
+    BrOffset -= 4;
+    return isIntN(5, BrOffset);
+  case Xtensa::BEQZ:
+  case Xtensa::BNEZ:
+  case Xtensa::BLTZ:
+  case Xtensa::BGEZ:
+    BrOffset -= 4;
+    return isIntN(11, BrOffset);
+  case Xtensa::BTs:
+  case Xtensa::BFs:
+    BrOffset -= 4;
+    return isIntN(7, BrOffset);
+  default:
+    llvm_unreachable("Unknown branch opcode");
+  }
+} 
+
 unsigned XtensaInstrInfo::BranchType(unsigned OpCode) const {
   switch (OpCode) {
   case Xtensa::J:
@@ -574,14 +662,9 @@ void XtensaInstrInfo::getLoadStoreOpcodes(const TargetRegisterClass *RC,
                                           unsigned &StoreOpcode,
                                           int64_t offset) const {
   if (RC == &Xtensa::ARRegClass) {
-    if (offset >= 0 && offset <= 60) {
-      LoadOpcode = Xtensa::L32I_N;
-      StoreOpcode = Xtensa::S32I_N;
-    } else /* if (offset >= 0  &&  offset <= 1020) */
-    {
-      LoadOpcode = Xtensa::L32I;
-      StoreOpcode = Xtensa::S32I;
-    }
+    //TODO: Use L32I_N and S32I_N when it possible
+    LoadOpcode = Xtensa::L32I;
+    StoreOpcode = Xtensa::S32I;
   } else if (RC == &Xtensa::FPRRegClass) {
     LoadOpcode = Xtensa::L32F;
     StoreOpcode = Xtensa::S32F;
@@ -599,7 +682,7 @@ void XtensaInstrInfo::loadImmediate(MachineBasicBlock &MBB,
 
   // create virtual reg to store immediate
   *Reg = RegInfo.createVirtualRegister(RC);
-  if (Value >= 32 && Value <= 95) {
+  if (Value >= -32 && Value <= 95) {
     BuildMI(MBB, MBBI, DL, get(Xtensa::MOVI_N), *Reg).addImm(Value);
   } else if (Value >= -2048 && Value <= 2047) {
     BuildMI(MBB, MBBI, DL, get(Xtensa::MOVI), *Reg).addImm(Value);

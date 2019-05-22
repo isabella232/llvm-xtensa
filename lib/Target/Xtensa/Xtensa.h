@@ -35,7 +35,6 @@ const unsigned CBRANCH_B = 5;
 
 FunctionPass *createXtensaISelDag(XtensaTargetMachine &TM,
                                   CodeGenOpt::Level OptLevel);
-FunctionPass *createXtensaBranchSelectionPass();
 FunctionPass *createXtensaSizeReductionPass();
 
 void initializeXtensaZOLPassPass(PassRegistry &Registry);

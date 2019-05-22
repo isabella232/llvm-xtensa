@@ -26,23 +26,6 @@
 namespace llvm {
 
 class XtensaTargetMachine;
-
-namespace XtensaII {
-// TODO
-enum {
-  // Masks out the bits for the access model.
-  MO_SYMBOL_MODIFIER = (1 << 0),
-
-  // @GOT (aka @GOTENT)
-  MO_GOT = (1 << 0),
-
-  MO_ABS_HI,
-  MO_ABS_LO,
-  MO_TPREL_HI,
-  MO_TPREL_LO
-};
-} // namespace XtensaII
-
 class XtensaSubtarget;
 class XtensaInstrInfo : public XtensaGenInstrInfo {
   const XtensaRegisterInfo RI;
@@ -58,7 +41,7 @@ public:
                               int &FrameIndex) const override;
   void adjustStackPtr(unsigned SP, int64_t Amount, MachineBasicBlock &MBB,
                       MachineBasicBlock::iterator I) const;
-  unsigned GetInstSizeInBytes(MachineInstr *I) const;
+  unsigned getInstSizeInBytes(const MachineInstr &MI) const override;
   bool analyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
                      MachineBasicBlock *&FBB,
                      SmallVectorImpl<MachineOperand> &Cond,
@@ -73,11 +56,13 @@ public:
                               MachineBasicBlock::iterator I,
                               MachineBasicBlock *TBB,
                               ArrayRef<MachineOperand> Cond,
-                              const DebugLoc &DL) const;
+                              const DebugLoc &DL,
+                              int *BytesAdded) const;
   unsigned InsertConstBranchAtInst(MachineBasicBlock &MBB, MachineInstr *I,
                                    int64_t offset,
                                    ArrayRef<MachineOperand> Cond,
-                                   DebugLoc DL) const;
+                                   DebugLoc DL,
+                                   int *BytesAdded) const;
   void copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
                    const DebugLoc &DL, unsigned DestReg, unsigned SrcReg,
                    bool KillSrc) const override;
@@ -92,6 +77,10 @@ public:
                             const TargetRegisterInfo *TRI) const override;
   bool
   reverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond) const override;
+  MachineBasicBlock *getBranchDestBlock(const MachineInstr &MI) const override;
+  
+  bool isBranchOffsetInRange(unsigned BranchOpc,
+                             int64_t BrOffset) const override;
 
   // Return the XtensaRegisterInfo, which this class owns.
   const XtensaRegisterInfo &getRegisterInfo() const { return RI; }
